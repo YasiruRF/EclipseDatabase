@@ -55,20 +55,35 @@ def create_results_dataframe(results: List[Dict]) -> pd.DataFrame:
     
     df_data = []
     for result in results:
-        student = result.get("students", {})
-        event = result.get("events", {})
-        
-        df_data.append({
-            "Position": result.get("position", "N/A"),
-            "Curtin ID": student.get("curtin_id", "N/A"),
-            "Bib ID": student.get("bib_id", "N/A"),
-            "First Name": student.get("first_name", "N/A"),
-            "Last Name": student.get("last_name", "N/A"),
-            "House": student.get("house", "N/A"),
-            "Event": event.get("event_name", "N/A"),
-            "Result": format_result_value(result.get("result_value", 0), event.get("event_type", "")),
-            "Points": result.get("points", 0)
-        })
+        try:
+            # Handle different possible data structures
+            student_data = result.get("students", {})
+            event_data = result.get("events", {})
+            
+            # If students/events data is a list, take first item
+            if isinstance(student_data, list) and student_data:
+                student_data = student_data[0]
+            if isinstance(event_data, list) and event_data:
+                event_data = event_data[0]
+            
+            df_data.append({
+                "Position": result.get("position", "N/A"),
+                "Curtin ID": student_data.get("curtin_id", "N/A"),
+                "Bib ID": student_data.get("bib_id", "N/A"),
+                "First Name": student_data.get("first_name", "Unknown"),
+                "Last Name": student_data.get("last_name", ""),
+                "House": student_data.get("house", "Unknown"),
+                "Event": event_data.get("event_name", "Unknown"),
+                "Result": format_result_value(
+                    result.get("result_value", 0), 
+                    event_data.get("event_type", "")
+                ),
+                "Points": result.get("points", 0)
+            })
+        except Exception as e:
+            # Skip problematic records but log the issue
+            print(f"Error processing result record: {e}")
+            continue
     
     return pd.DataFrame(df_data)
 
@@ -171,26 +186,53 @@ def search_and_filter_results(results: List[Dict], search_term: str = "",
     # Apply search term filter
     if search_term:
         search_term = search_term.lower()
-        filtered_results = [
-            result for result in filtered_results
-            if (search_term in result.get("students", {}).get("first_name", "").lower() or
-                search_term in result.get("students", {}).get("last_name", "").lower() or
-                search_term in str(result.get("students", {}).get("curtin_id", "")) or
-                search_term in str(result.get("students", {}).get("bib_id", "")))
-        ]
+        filtered_results = []
+        for result in results:
+            try:
+                student_data = result.get("students", {})
+                if isinstance(student_data, list) and student_data:
+                    student_data = student_data[0]
+                
+                # Search in student data
+                if (search_term in student_data.get("first_name", "").lower() or
+                    search_term in student_data.get("last_name", "").lower() or
+                    search_term in str(student_data.get("curtin_id", "")) or
+                    search_term in str(student_data.get("bib_id", ""))):
+                    filtered_results.append(result)
+            except Exception as e:
+                print(f"Error filtering result: {e}")
+                continue
     
     # Apply house filter
     if house_filter and house_filter != "All":
-        filtered_results = [
-            result for result in filtered_results
-            if result.get("students", {}).get("house") == house_filter
-        ]
+        temp_filtered = []
+        for result in filtered_results:
+            try:
+                student_data = result.get("students", {})
+                if isinstance(student_data, list) and student_data:
+                    student_data = student_data[0]
+                
+                if student_data.get("house") == house_filter:
+                    temp_filtered.append(result)
+            except Exception as e:
+                print(f"Error filtering by house: {e}")
+                continue
+        filtered_results = temp_filtered
     
     # Apply event filter
     if event_filter and event_filter != "All":
-        filtered_results = [
-            result for result in filtered_results
-            if result.get("events", {}).get("event_name") == event_filter
-        ]
+        temp_filtered = []
+        for result in filtered_results:
+            try:
+                event_data = result.get("events", {})
+                if isinstance(event_data, list) and event_data:
+                    event_data = event_data[0]
+                
+                if event_data.get("event_name") == event_filter:
+                    temp_filtered.append(result)
+            except Exception as e:
+                print(f"Error filtering by event: {e}")
+                continue
+        filtered_results = temp_filtered
     
     return filtered_results

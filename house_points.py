@@ -122,16 +122,38 @@ def show_analytics(db: DatabaseManager):
         display_warning_message("No results data available for analysis.")
         return
     
-    # Prepare data for analysis
+    # Debug: Show structure of first result
+    if all_results:
+        st.write("DEBUG - Result structure:", all_results[0].keys())
+    
+    # Prepare data for analysis with error handling
     analysis_data = []
     for result in all_results:
-        analysis_data.append({
-            "house": result["students"]["house"],
-            "event_type": result["events"]["event_type"],
-            "event_name": result["events"]["event_name"],
-            "points": result["points"] or 0,
-            "position": result["position"] or 0
-        })
+        try:
+            # Handle different possible data structures
+            student_data = result.get("students", {})
+            event_data = result.get("events", {})
+            
+            # If students/events data is a list, take first item
+            if isinstance(student_data, list) and student_data:
+                student_data = student_data[0]
+            if isinstance(event_data, list) and event_data:
+                event_data = event_data[0]
+            
+            analysis_data.append({
+                "house": student_data.get("house", "Unknown"),
+                "event_type": event_data.get("event_type", "Unknown"),
+                "event_name": event_data.get("event_name", "Unknown"),
+                "points": result.get("points", 0) or 0,
+                "position": result.get("position", 0) or 0
+            })
+        except Exception as e:
+            st.error(f"Error processing result: {e}")
+            continue
+    
+    if not analysis_data:
+        display_warning_message("No valid analysis data available.")
+        return
     
     df_analysis = pd.DataFrame(analysis_data)
     
@@ -262,11 +284,20 @@ def show_detailed_breakdown(db: DatabaseManager):
         house_participants = {}
         
         for result in results:
-            house = result["students"]["house"]
-            points = result["points"] or 0
-            
-            house_points_event[house] = house_points_event.get(house, 0) + points
-            house_participants[house] = house_participants.get(house, 0) + 1
+            try:
+                # Handle different possible data structures
+                student_data = result.get("students", {})
+                if isinstance(student_data, list) and student_data:
+                    student_data = student_data[0]
+                
+                house = student_data.get("house", "Unknown")
+                points = result.get("points", 0) or 0
+                
+                house_points_event[house] = house_points_event.get(house, 0) + points
+                house_participants[house] = house_participants.get(house, 0) + 1
+            except Exception as e:
+                st.error(f"Error processing result: {e}")
+                continue
         
         # Display breakdown
         st.markdown("### 🏆 Points Earned by House")
@@ -301,15 +332,22 @@ def show_detailed_breakdown(db: DatabaseManager):
         
         results_data = []
         for result in results:
-            student = result["students"]
-            results_data.append({
-                "Position": result["position"],
-                "Name": f"{student['first_name']} {student['last_name']}",
-                "House": student["house"],
-                "Bib ID": student["bib_id"],
-                "Result": f"{result['result_value']:.2f}",
-                "Points": result["points"]
-            })
+            try:
+                student_data = result.get("students", {})
+                if isinstance(student_data, list) and student_data:
+                    student_data = student_data[0]
+                
+                results_data.append({
+                    "Position": result.get("position", "N/A"),
+                    "Name": f"{student_data.get('first_name', 'Unknown')} {student_data.get('last_name', '')}",
+                    "House": student_data.get("house", "Unknown"),
+                    "Bib ID": student_data.get("bib_id", "N/A"),
+                    "Result": f"{result.get('result_value', 0):.2f}",
+                    "Points": result.get("points", 0)
+                })
+            except Exception as e:
+                st.error(f"Error processing result: {e}")
+                continue
         
         df_results = pd.DataFrame(results_data)
         
