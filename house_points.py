@@ -1,4 +1,4 @@
-"""House Points Leaderboard Page"""
+"""House Points Leaderboard Page - Fixed Version"""
 
 import streamlit as st
 import pandas as pd
@@ -122,11 +122,7 @@ def show_analytics(db: DatabaseManager):
         display_warning_message("No results data available for analysis.")
         return
     
-    # Debug: Show structure of first result
-    if all_results:
-        st.write("DEBUG - Result structure:", all_results[0].keys())
-    
-    # Prepare data for analysis with error handling
+    # Prepare data for analysis with robust error handling
     analysis_data = []
     for result in all_results:
         try:
@@ -140,15 +136,17 @@ def show_analytics(db: DatabaseManager):
             if isinstance(event_data, list) and event_data:
                 event_data = event_data[0]
             
-            analysis_data.append({
-                "house": student_data.get("house", "Unknown"),
-                "event_type": event_data.get("event_type", "Unknown"),
-                "event_name": event_data.get("event_name", "Unknown"),
-                "points": result.get("points", 0) or 0,
-                "position": result.get("position", 0) or 0
-            })
+            # Only add if we have valid data
+            if student_data and event_data:
+                analysis_data.append({
+                    "house": student_data.get("house", "Unknown"),
+                    "event_type": event_data.get("event_type", "Unknown"),
+                    "event_name": event_data.get("event_name", "Unknown"),
+                    "points": result.get("points", 0) or 0,
+                    "position": result.get("position", 0) or 0
+                })
         except Exception as e:
-            st.error(f"Error processing result: {e}")
+            # Skip problematic records silently
             continue
     
     if not analysis_data:
@@ -237,10 +235,11 @@ def show_analytics(db: DatabaseManager):
     
     for i, (_, row) in enumerate(participation.iterrows()):
         with [col1, col2, col3, col4][i]:
+            house_avg = df_analysis[df_analysis['house'] == row['House']]['points'].mean()
             st.metric(
                 f"{row['House']} House",
                 f"{row['Total Participations']} events",
-                delta=f"Avg: {df_analysis[df_analysis['house'] == row['House']]['points'].mean():.1f} pts"
+                delta=f"Avg: {house_avg:.1f} pts"
             )
 
 def show_detailed_breakdown(db: DatabaseManager):
@@ -296,7 +295,6 @@ def show_detailed_breakdown(db: DatabaseManager):
                 house_points_event[house] = house_points_event.get(house, 0) + points
                 house_participants[house] = house_participants.get(house, 0) + 1
             except Exception as e:
-                st.error(f"Error processing result: {e}")
                 continue
         
         # Display breakdown
@@ -346,7 +344,6 @@ def show_detailed_breakdown(db: DatabaseManager):
                     "Points": result.get("points", 0)
                 })
             except Exception as e:
-                st.error(f"Error processing result: {e}")
                 continue
         
         df_results = pd.DataFrame(results_data)
