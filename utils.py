@@ -117,10 +117,10 @@ def style_dataframe(df: pd.DataFrame, house_colors: Dict[str, str] = None) -> pd
     # Define house colors
     if house_colors is None:
         house_colors = {
-            "Red": "#ff6b6b",
-            "Blue": "#4ecdc4", 
-            "Green": "#95e1d3",
-            "Yellow": "#fce38a"
+            "Ignis": "#ffebee",    # Light red
+            "Nereus": "#e3f2fd",   # Light blue
+            "Ventus": "#fffde7",   # Light yellow
+            "Terra": "#e8f5e8"     # Light green
         }
     
     def highlight_house(row):

@@ -19,8 +19,16 @@ DEFAULT_POINT_ALLOCATION = {
     8: 1    # 8th place
 }
 
-# House names
-HOUSES = ["Red", "Blue", "Green", "Yellow"]
+# House names with their corresponding colors
+HOUSES = ["Ignis", "Nereus", "Ventus", "Terra"]
+
+# House color mapping
+HOUSE_COLORS = {
+    "Ignis": "#ff6b6b",    # Red
+    "Nereus": "#4ecdc4",   # Blue
+    "Ventus": "#fce38a",   # Yellow
+    "Terra": "#95e1d3"     # Green
+}
 
 # Event categories with sample events
 EVENTS = {

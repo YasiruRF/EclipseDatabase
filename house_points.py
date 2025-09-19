@@ -1,11 +1,11 @@
-"""House Points Leaderboard Page - Fixed Version"""
+"""House Points Leaderboard Page - Updated with new house names and colors"""
 
 import streamlit as st
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 from database import DatabaseManager
-from config import HOUSES
+from config import HOUSES, HOUSE_COLORS
 from utils import (
     create_house_points_dataframe,
     create_metric_cards,
@@ -60,17 +60,27 @@ def show_leaderboard(db: DatabaseManager):
     df = create_house_points_dataframe(house_points)
     
     if not df.empty:
-        # Style the leaderboard
+        # Style the leaderboard with new house colors
+        house_style_colors = {
+            "Ignis": "#ffebee",    # Light red
+            "Nereus": "#e3f2fd",   # Light blue
+            "Ventus": "#fffde7",   # Light yellow
+            "Terra": "#e8f5e8"     # Light green
+        }
+        
         def style_leaderboard(row):
             rank = row["Rank"]
+            house = row["House"]
+            base_color = house_style_colors.get(house, "#ffffff")
+            
             if rank == 1:
-                return ['background: linear-gradient(45deg, #FFD700, #FFA500); font-weight: bold'] * len(row)
+                return [f'background: linear-gradient(45deg, #FFD700, #FFA500); font-weight: bold'] * len(row)
             elif rank == 2:
-                return ['background: linear-gradient(45deg, #C0C0C0, #A9A9A9); font-weight: bold'] * len(row)
+                return [f'background: linear-gradient(45deg, #C0C0C0, #A9A9A9); font-weight: bold'] * len(row)
             elif rank == 3:
-                return ['background: linear-gradient(45deg, #CD7F32, #A0522D); font-weight: bold'] * len(row)
+                return [f'background: linear-gradient(45deg, #CD7F32, #A0522D); font-weight: bold'] * len(row)
             else:
-                return [''] * len(row)
+                return [f'background-color: {base_color}'] * len(row)
         
         styled_df = df.style.apply(style_leaderboard, axis=1)
         st.dataframe(styled_df, use_container_width=True, hide_index=True)
@@ -78,23 +88,20 @@ def show_leaderboard(db: DatabaseManager):
         # Victory celebration for leading house
         if house_points:
             leading_house = house_points[0]
-            st.success(f"🎉 **{leading_house['house']} House** is currently leading with **{leading_house['total_points']} points**!")
+            house_emoji = {"Ignis": "🔥", "Nereus": "🌊", "Ventus": "💨", "Terra": "🌍"}
+            emoji = house_emoji.get(leading_house['house'], "🏆")
+            st.success(f"{emoji} **{leading_house['house']} House** is currently leading with **{leading_house['total_points']} points**!")
         
         # Progress visualization
         st.markdown("### 📈 Points Progress")
         
-        # Create bar chart
+        # Create bar chart with house colors
         fig = px.bar(
             df,
             x="House",
             y="Total Points",
             color="House",
-            color_discrete_map={
-                "Red": "#ff6b6b",
-                "Blue": "#4ecdc4",
-                "Green": "#95e1d3", 
-                "Yellow": "#fce38a"
-            },
+            color_discrete_map=HOUSE_COLORS,
             title="House Points Comparison"
         )
         
@@ -165,12 +172,7 @@ def show_analytics(db: DatabaseManager):
         x="event_type",
         y="points",
         color="house",
-        color_discrete_map={
-            "Red": "#ff6b6b",
-            "Blue": "#4ecdc4",
-            "Green": "#95e1d3",
-            "Yellow": "#fce38a"
-        },
+        color_discrete_map=HOUSE_COLORS,
         title="Points Distribution by Event Type",
         barmode="group"
     )
@@ -193,12 +195,7 @@ def show_analytics(db: DatabaseManager):
             names="House",
             title="Average Points per Event by House",
             color="House",
-            color_discrete_map={
-                "Red": "#ff6b6b",
-                "Blue": "#4ecdc4",
-                "Green": "#95e1d3",
-                "Yellow": "#fce38a"
-            }
+            color_discrete_map=HOUSE_COLORS
         )
         
         st.plotly_chart(fig_avg, use_container_width=True)
@@ -214,12 +211,7 @@ def show_analytics(db: DatabaseManager):
             x="House",
             y="Podium Finishes",
             color="House",
-            color_discrete_map={
-                "Red": "#ff6b6b",
-                "Blue": "#4ecdc4",
-                "Green": "#95e1d3",
-                "Yellow": "#fce38a"
-            },
+            color_discrete_map=HOUSE_COLORS,
             title="Total Podium Finishes (Top 3)"
         )
         
@@ -236,8 +228,10 @@ def show_analytics(db: DatabaseManager):
     for i, (_, row) in enumerate(participation.iterrows()):
         with [col1, col2, col3, col4][i]:
             house_avg = df_analysis[df_analysis['house'] == row['House']]['points'].mean()
+            house_emoji = {"Ignis": "🔥", "Nereus": "🌊", "Ventus": "💨", "Terra": "🌍"}
+            emoji = house_emoji.get(row['House'], "🏆")
             st.metric(
-                f"{row['House']} House",
+                f"{emoji} {row['House']}",
                 f"{row['Total Participations']} events",
                 delta=f"Avg: {house_avg:.1f} pts"
             )
@@ -301,6 +295,13 @@ def show_detailed_breakdown(db: DatabaseManager):
         st.markdown("### 🏆 Points Earned by House")
         
         breakdown_data = []
+        house_style_colors = {
+            "Ignis": "#ffebee",    # Light red
+            "Nereus": "#e3f2fd",   # Light blue
+            "Ventus": "#fffde7",   # Light yellow
+            "Terra": "#e8f5e8"     # Light green
+        }
+        
         for house in HOUSES:
             breakdown_data.append({
                 "House": house,
@@ -313,13 +314,7 @@ def show_detailed_breakdown(db: DatabaseManager):
         # Style the breakdown table
         def style_breakdown(row):
             house = row["House"]
-            colors = {
-                "Red": "#ffebee",
-                "Blue": "#e3f2fd",
-                "Green": "#e8f5e8",
-                "Yellow": "#fffde7"
-            }
-            color = colors.get(house, "#ffffff")
+            color = house_style_colors.get(house, "#ffffff")
             return [f'background-color: {color}'] * len(row)
         
         styled_breakdown = df_breakdown.style.apply(style_breakdown, axis=1)
@@ -348,18 +343,22 @@ def show_detailed_breakdown(db: DatabaseManager):
         
         df_results = pd.DataFrame(results_data)
         
-        # Style results with position highlighting
-        def highlight_positions(row):
+        # Style results with position highlighting and house colors
+        def highlight_positions_and_houses(row):
             pos = row["Position"]
+            house = row.get("House", "")
+            
             if pos == 1:
                 return ['background-color: #FFD700; font-weight: bold'] * len(row)  # Gold
             elif pos == 2:
                 return ['background-color: #C0C0C0; font-weight: bold'] * len(row)  # Silver
             elif pos == 3:
                 return ['background-color: #CD7F32; font-weight: bold'] * len(row)  # Bronze
-            return [''] * len(row)
+            else:
+                house_color = house_style_colors.get(house, "#ffffff")
+                return [f'background-color: {house_color}'] * len(row)
         
-        styled_results = df_results.style.apply(highlight_positions, axis=1)
+        styled_results = df_results.style.apply(highlight_positions_and_houses, axis=1)
         st.dataframe(styled_results, use_container_width=True, hide_index=True)
         
         # Export option

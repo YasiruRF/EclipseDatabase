@@ -1,9 +1,9 @@
-"""Results View Page for displaying event results"""
+"""Results View Page for displaying event results - Updated with new house names"""
 
 import streamlit as st
 import pandas as pd
 from database import DatabaseManager
-from config import EVENT_TYPES, HOUSES
+from config import EVENT_TYPES, HOUSES, HOUSE_COLORS
 from utils import (
     create_results_dataframe,
     format_result_value,
@@ -101,7 +101,7 @@ def show_results_by_type(db: DatabaseManager):
             df = create_results_dataframe(event_results)
             
             if not df.empty:
-                # Style the dataframe
+                # Style the dataframe with new house colors
                 styled_df = style_results_dataframe(df)
                 st.dataframe(styled_df, use_container_width=True)
                 
@@ -151,20 +151,29 @@ def show_individual_event_results(db: DatabaseManager):
         with col3:
             st.metric("Participants", len(results))
         
-        # Display podium (top 3)
+        # Display podium (top 3) with house colors
         if len(results) >= 3:
             st.markdown("### 🏆 Podium")
             
             pod_col1, pod_col2, pod_col3 = st.columns(3)
             
+            # House emojis
+            house_emojis = {
+                "Ignis": "🔥",
+                "Nereus": "🌊", 
+                "Ventus": "💨",
+                "Terra": "🌍"
+            }
+            
             # 1st place
             with pod_col2:  # Center column for 1st place
                 winner = results[0]["students"]
+                house_emoji = house_emojis.get(winner['house'], "🏆")
                 st.markdown(f"""
                 <div style="text-align: center; padding: 20px; background: linear-gradient(45deg, #FFD700, #FFA500); border-radius: 10px; margin: 10px 0;">
                     <h2>🥇</h2>
                     <h3>{winner['first_name']} {winner['last_name']}</h3>
-                    <p><strong>{winner['house']} House</strong></p>
+                    <p><strong>{house_emoji} {winner['house']} House</strong></p>
                     <p>Result: {format_result_value(results[0]['result_value'], selected_event['event_type'])}</p>
                     <p>Points: {results[0]['points']}</p>
                 </div>
@@ -174,11 +183,12 @@ def show_individual_event_results(db: DatabaseManager):
             if len(results) >= 2:
                 with pod_col1:
                     second = results[1]["students"]
+                    house_emoji = house_emojis.get(second['house'], "🏆")
                     st.markdown(f"""
                     <div style="text-align: center; padding: 15px; background: linear-gradient(45deg, #C0C0C0, #A9A9A9); border-radius: 10px; margin: 10px 0;">
                         <h3>🥈</h3>
                         <h4>{second['first_name']} {second['last_name']}</h4>
-                        <p>{second['house']} House</p>
+                        <p>{house_emoji} {second['house']} House</p>
                         <p>{format_result_value(results[1]['result_value'], selected_event['event_type'])}</p>
                         <p>{results[1]['points']} pts</p>
                     </div>
@@ -188,11 +198,12 @@ def show_individual_event_results(db: DatabaseManager):
             if len(results) >= 3:
                 with pod_col3:
                     third = results[2]["students"]
+                    house_emoji = house_emojis.get(third['house'], "🏆")
                     st.markdown(f"""
                     <div style="text-align: center; padding: 15px; background: linear-gradient(45deg, #CD7F32, #A0522D); border-radius: 10px; margin: 10px 0;">
                         <h3>🥉</h3>
                         <h4>{third['first_name']} {third['last_name']}</h4>
-                        <p>{third['house']} House</p>
+                        <p>{house_emoji} {third['house']} House</p>
                         <p>{format_result_value(results[2]['result_value'], selected_event['event_type'])}</p>
                         <p>{results[2]['points']} pts</p>
                     </div>
@@ -321,15 +332,15 @@ def show_search_results(db: DatabaseManager):
             )
 
 def style_results_dataframe(df: pd.DataFrame) -> pd.DataFrame:
-    """Apply styling to results dataframe"""
+    """Apply styling to results dataframe with new house colors"""
     if df.empty:
         return df
     
     house_colors = {
-        "Red": "#ffebee",
-        "Blue": "#e3f2fd", 
-        "Green": "#e8f5e8",
-        "Yellow": "#fffde7"
+        "Ignis": "#ffebee",    # Light red
+        "Nereus": "#e3f2fd",   # Light blue
+        "Ventus": "#fffde7",   # Light yellow  
+        "Terra": "#e8f5e8"     # Light green
     }
     
     def highlight_row(row):

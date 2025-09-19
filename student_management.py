@@ -1,4 +1,4 @@
-"""Student Management Page"""
+"""Student Management Page - Updated with new house names"""
 
 import streamlit as st
 from database import DatabaseManager
@@ -65,11 +65,15 @@ def show_add_student_form(db: DatabaseManager):
                 placeholder="Enter last name"
             )
             
-            house = st.selectbox(
+            # House selector with descriptions
+            house_options = [f"{house} {'🔥' if house == 'Ignis' else '🌊' if house == 'Nereus' else '💨' if house == 'Ventus' else '🌍'}" for house in HOUSES]
+            house_selection = st.selectbox(
                 "House",
-                options=HOUSES,
+                options=house_options,
                 help="Select student's house"
             )
+            # Extract house name without emoji
+            house = house_selection.split()[0]
         
         submitted = st.form_submit_button("Add Student", type="primary")
         
@@ -148,18 +152,22 @@ def show_search_student(db: DatabaseManager):
                     st.metric("Last Name", student["last_name"])
                 
                 with col3:
-                    st.metric("House", student["house"])
+                    house_emoji = {"Ignis": "🔥", "Nereus": "🌊", "Ventus": "💨", "Terra": "🌍"}
+                    emoji = house_emoji.get(student["house"], "🏆")
+                    st.metric("House", f"{emoji} {student['house']}")
                     st.metric("Added", student["created_at"][:10])  # Show date only
                 
                 # Show student info card
                 with st.container():
                     st.markdown("---")
+                    house_emoji = {"Ignis": "🔥", "Nereus": "🌊", "Ventus": "💨", "Terra": "🌍"}
+                    emoji = house_emoji.get(student['house'], "🏆")
                     st.markdown(f"""
                     ### 🏃‍♂️ {student['first_name']} {student['last_name']}
                     
                     - **Curtin ID:** {student['curtin_id']}
                     - **Bib ID:** {student['bib_id']}
-                    - **House:** {student['house']}
+                    - **House:** {emoji} {student['house']}
                     - **Registered:** {student['created_at'][:10]}
                     """)
             else:
@@ -207,24 +215,27 @@ def show_all_students(db: DatabaseManager):
     # Create DataFrame for display
     df_data = []
     for student in filtered_students:
+        house_emoji = {"Ignis": "🔥", "Nereus": "🌊", "Ventus": "💨", "Terra": "🌍"}
+        emoji = house_emoji.get(student["house"], "🏆")
+        
         df_data.append({
             "Curtin ID": student["curtin_id"],
             "Bib ID": student["bib_id"],
             "Name": f"{student['first_name']} {student['last_name']}",
             "First Name": student["first_name"],
             "Last Name": student["last_name"],
-            "House": student["house"],
+            "House": f"{emoji} {student['house']}",
             "Registered": student["created_at"][:10]
         })
     
     df = pd.DataFrame(df_data)
     
-    # Style the dataframe
+    # Style the dataframe with new house colors
     house_colors = {
-        "Red": "#ffebee",
-        "Blue": "#e3f2fd",
-        "Green": "#e8f5e8", 
-        "Yellow": "#fffde7"
+        "🔥 Ignis": "#ffebee",    # Light red
+        "🌊 Nereus": "#e3f2fd",   # Light blue
+        "💨 Ventus": "#fffde7",   # Light yellow
+        "🌍 Terra": "#e8f5e8"     # Light green
     }
     
     def highlight_house(row):
@@ -240,12 +251,18 @@ def show_all_students(db: DatabaseManager):
     st.markdown("---")
     st.subheader("📊 Summary Statistics")
     
-    house_counts = df['House'].value_counts()
+    # Extract house names for counting
+    house_names = [student['house'] for student in filtered_students]
+    house_counts = pd.Series(house_names).value_counts()
     
     col1, col2, col3, col4 = st.columns(4)
-    for i, (house, count) in enumerate(house_counts.items()):
-        with [col1, col2, col3, col4][i % 4]:
-            st.metric(f"{house} House", count)
+    house_emojis = {"Ignis": "🔥", "Nereus": "🌊", "Ventus": "💨", "Terra": "🌍"}
+    
+    for i, house in enumerate(HOUSES):
+        count = house_counts.get(house, 0)
+        emoji = house_emojis.get(house, "🏆")
+        with [col1, col2, col3, col4][i]:
+            st.metric(f"{emoji} {house}", count)
 
 def filter_students(students, search_term="", house_filter="All"):
     """Filter students based on search criteria"""

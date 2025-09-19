@@ -10,7 +10,7 @@ CREATE TABLE IF NOT EXISTS students (
     bib_id INTEGER UNIQUE NOT NULL CHECK (bib_id > 0),
     first_name VARCHAR NOT NULL CHECK (length(first_name) > 0),
     last_name VARCHAR NOT NULL CHECK (length(last_name) > 0),
-    house VARCHAR NOT NULL CHECK (house IN ('Red', 'Blue', 'Green', 'Yellow')),
+    house VARCHAR NOT NULL CHECK (house IN ('Ignis', 'Nereus', 'Ventus', 'Terra')),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
@@ -55,12 +55,12 @@ ON CONFLICT DO NOTHING;
 
 -- Sample students for testing (optional - remove if you don't want test data)
 INSERT INTO students (curtin_id, bib_id, first_name, last_name, house) VALUES 
-    ('12345678', 101, 'John', 'Smith', 'Red'),
-    ('12345679', 102, 'Jane', 'Doe', 'Blue'),
-    ('12345680', 103, 'Mike', 'Johnson', 'Green'),
-    ('12345681', 104, 'Sarah', 'Wilson', 'Yellow'),
-    ('12345682', 105, 'Alex', 'Brown', 'Red'),
-    ('12345683', 106, 'Emily', 'Davis', 'Blue')
+    ('12345678', 101, 'John', 'Smith', 'Ignis'),
+    ('12345679', 102, 'Jane', 'Doe', 'Nereus'),
+    ('12345680', 103, 'Mike', 'Johnson', 'Terra'),
+    ('12345681', 104, 'Sarah', 'Wilson', 'Ventus'),
+    ('12345682', 105, 'Alex', 'Brown', 'Ignis'),
+    ('12345683', 106, 'Emily', 'Davis', 'Nereus')
 ON CONFLICT DO NOTHING;
 
 -- Views for easier querying (optional but helpful)

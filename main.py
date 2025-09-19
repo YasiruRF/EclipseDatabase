@@ -27,14 +27,14 @@ except ImportError as e:
     st.error(f"Failed to import page modules: {e}")
     st.stop()
 
-# Custom CSS for better styling
+# Custom CSS for better styling with new house colors
 st.markdown("""
 <style>
     .main-header {
         font-size: 3rem;
         font-weight: bold;
         text-align: center;
-        background: linear-gradient(45deg, #ff6b6b, #4ecdc4, #95e1d3, #fce38a);
+        background: linear-gradient(45deg, #ff6b6b, #4ecdc4, #fce38a, #95e1d3);
         background-size: 400% 400%;
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
@@ -76,6 +76,27 @@ st.markdown("""
         padding: 1rem;
         border-radius: 0.5rem;
         box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    
+    /* House-specific styling */
+    .ignis-house {
+        background: linear-gradient(45deg, #ff6b6b, #ff8a80);
+        color: white;
+    }
+    
+    .nereus-house {
+        background: linear-gradient(45deg, #4ecdc4, #80deea);
+        color: white;
+    }
+    
+    .ventus-house {
+        background: linear-gradient(45deg, #fce38a, #fff59d);
+        color: #333;
+    }
+    
+    .terra-house {
+        background: linear-gradient(45deg, #95e1d3, #b2dfdb);
+        color: #333;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -181,7 +202,15 @@ def show_database_setup():
     
     Refer to `database_setup.sql` for the complete schema.
     
-    ### 4. Troubleshooting
+    ### 4. House Information
+    
+    The system uses four houses:
+    - **Ignis** (Red) 🔥
+    - **Nereus** (Blue) 🌊
+    - **Ventus** (Yellow) 💨
+    - **Terra** (Green) 🌍
+    
+    ### 5. Troubleshooting
     
     If you continue to have issues:
     1. Verify your Supabase project URL and anon key
@@ -243,6 +272,17 @@ def main():
         # Quick stats in sidebar with error handling
         if "db_manager" in st.session_state:
             show_sidebar_stats(st.session_state.db_manager)
+        
+        st.markdown("---")
+        
+        # House legend
+        st.markdown("""
+        ### Houses
+        🔥 **Ignis** (Red)  
+        🌊 **Nereus** (Blue)  
+        💨 **Ventus** (Yellow)  
+        🌍 **Terra** (Green)
+        """)
         
         st.markdown("---")
         
