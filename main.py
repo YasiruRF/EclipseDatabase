@@ -1,5 +1,5 @@
 """
-Main Streamlit application for Sports Meet Event Management System
+Enhanced Main Streamlit application for Sports Meet Event Management System
 """
 
 import streamlit as st
@@ -23,11 +23,12 @@ try:
     from event_entry import show_event_entry
     from results_view import show_results_view
     from house_points import show_house_points
+    from individual_athletes import show_individual_athletes
 except ImportError as e:
     st.error(f"Failed to import page modules: {e}")
     st.stop()
 
-# Custom CSS for better styling with new house colors
+# Enhanced CSS for better styling
 st.markdown("""
 <style>
     .main-header {
@@ -78,7 +79,7 @@ st.markdown("""
         box-shadow: 0 2px 4px rgba(0,0,0,0.1);
     }
     
-    /* House-specific styling */
+    /* Enhanced house-specific styling */
     .ignis-house {
         background: linear-gradient(45deg, #ff6b6b, #ff8a80);
         color: white;
@@ -97,6 +98,26 @@ st.markdown("""
     .terra-house {
         background: linear-gradient(45deg, #95e1d3, #b2dfdb);
         color: #333;
+    }
+    
+    /* Enhanced performance cards */
+    .performance-card {
+        padding: 1.5rem;
+        border-radius: 10px;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        margin: 1rem 0;
+        background: white;
+        border-left: 5px solid #4ecdc4;
+    }
+    
+    .champion-card {
+        background: linear-gradient(135deg, #FFD700, #FFA500);
+        color: #333;
+        font-weight: bold;
+        text-align: center;
+        padding: 2rem;
+        border-radius: 15px;
+        box-shadow: 0 8px 16px rgba(0,0,0,0.2);
     }
 </style>
 """, unsafe_allow_html=True)
@@ -141,22 +162,28 @@ def initialize_database():
             existing_events = db.get_all_events()
             
             if not existing_events:
-                # Add some default events
-                from config import EVENTS, DEFAULT_POINT_ALLOCATION
+                # Add some default events with proper point allocations
+                from config import EVENTS, DEFAULT_INDIVIDUAL_POINTS, DEFAULT_RELAY_POINTS
                 
                 success_count = 0
                 for event_type, events_list in EVENTS.items():
-                    for event_info in events_list[:2]:  # Add first 2 events of each type
+                    for event_info in events_list[:3]:  # Add first 3 events of each type
+                        is_relay = event_info.get("is_relay", False)
+                        point_allocation = DEFAULT_RELAY_POINTS if is_relay else DEFAULT_INDIVIDUAL_POINTS
+                        point_system_name = "Relay Events" if is_relay else "Individual Events"
+                        
                         if db.add_event(
                             event_name=event_info["name"],
                             event_type=event_type,
                             unit=event_info["unit"],
-                            point_allocation=DEFAULT_POINT_ALLOCATION
+                            is_relay=is_relay,
+                            point_allocation=point_allocation,
+                            point_system_name=point_system_name
                         ):
                             success_count += 1
                 
                 if success_count > 0:
-                    st.success(f"Initialized {success_count} default events.")
+                    st.success(f"Initialized {success_count} default events with proper point allocations.")
                     
         except Exception as e:
             st.warning(f"Could not initialize default events: {str(e)}")
@@ -169,15 +196,19 @@ def initialize_database():
         return False
 
 def show_database_setup():
-    """Show database setup instructions"""
+    """Show enhanced database setup instructions"""
     st.markdown("""
-    ## Database Setup Required
+    ## Enhanced Database Setup Required
     
     To use this application, you need to:
     
     ### 1. Set up Supabase Database
     
-    Run the SQL commands from `database_setup.sql` in your Supabase SQL editor to create the required tables.
+    Run the SQL commands from the enhanced `database_setup.sql` in your Supabase SQL editor to create the required tables with new features:
+    - **Gender field** for individual athlete tracking
+    - **Enhanced point allocation** system
+    - **Relay event support**
+    - **Individual athlete performance views**
     
     ### 2. Configure Environment Variables
     
@@ -193,69 +224,70 @@ def show_database_setup():
     SUPABASE_KEY = "your_supabase_anon_key"
     ```
     
-    ### 3. Database Tables
+    ### 3. Enhanced Features
     
-    The following tables must be created in your Supabase project:
-    - `students` - Student registration data
-    - `events` - Event definitions
-    - `results` - Competition results
+    The system now includes:
+    - **Individual athlete tracking** with gender-based rankings
+    - **Flexible point allocation** for different event types
+    - **Enhanced time input** for track events (MM:SS.ms format)
+    - **Field event distance tracking** in meters
+    - **Relay event support** with higher point allocations
     
-    Refer to `database_setup.sql` for the complete schema.
+    ### 4. House & Gender System
     
-    ### 4. House Information
+    The system uses four houses with gender-based athlete tracking:
+    - **Ignis** (Red) - Fire element
+    - **Nereus** (Blue) - Water element  
+    - **Ventus** (Yellow) - Air element
+    - **Terra** (Green) - Earth element
     
-    The system uses four houses:
-    - **Ignis** (Red) 🔥
-    - **Nereus** (Blue) 🌊
-    - **Ventus** (Yellow) 💨
-    - **Terra** (Green) 🌍
+    Gender options: Male, Female, Other
     
-    ### 5. Troubleshooting
+    ### 5. Point Allocation Systems
     
-    If you continue to have issues:
-    1. Verify your Supabase project URL and anon key
-    2. Check that your database tables exist
-    3. Ensure your Supabase project allows connections
-    4. Check the Streamlit logs for specific error messages
+    - **Individual Events**: 10, 8, 6, 5, 4, 3, 2, 1 points
+    - **Relay Events**: 20, 16, 12, 10, 8, 6, 4, 2 points
+    - **Custom**: Define your own point system
     """)
-
-def show_connection_error():
-    """Show connection error page"""
-    st.error("Database Connection Failed")
-    st.markdown("""
-    The application cannot connect to the database. This could be due to:
-    
-    - Missing or incorrect Supabase credentials
-    - Database tables not created
-    - Network connectivity issues
-    - Supabase service issues
-    
-    Please check your configuration and try refreshing the page.
-    """)
-    
-    if st.button("Retry Connection"):
-        st.rerun()
 
 def show_sidebar_stats(db):
-    """Show sidebar statistics safely"""
+    """Show enhanced sidebar statistics"""
     try:
         students_count = len(db.get_all_students())
         events_count = len(db.get_all_events())
+        
+        # Get athlete performance for additional stats
+        athletes = db.get_individual_athlete_performance(limit=5)
+        top_performers = len(athletes)
         
         st.markdown("### Quick Stats")
         col1, col2 = st.columns(2)
         
         with col1:
             st.metric("Students", students_count)
+            st.metric("Active Athletes", top_performers)
         
         with col2:
             st.metric("Events", events_count)
+            
+        # Show best athletes summary
+        if athletes:
+            st.markdown("### Champions")
+            best_athletes = db.get_best_athletes_by_gender()
+            
+            for gender in ['Male', 'Female']:
+                if gender in best_athletes:
+                    athlete = best_athletes[gender]
+                    st.markdown(f"""
+                    **Best {gender}**: {athlete['first_name']} {athlete['last_name']}  
+                    ({athlete['house']} - {athlete['total_points']} pts)
+                    """)
             
     except Exception as e:
         st.error(f"Error loading stats: {str(e)}")
 
 def main():
-    """Main application function"""
+    """Enhanced main application function"""
     
     # App header
     st.markdown('<h1 class="main-header">Sports Meet Manager</h1>', unsafe_allow_html=True)
@@ -269,42 +301,44 @@ def main():
     with st.sidebar:
         st.markdown("## Navigation")
         
-        # Quick stats in sidebar with error handling
+        # Enhanced stats in sidebar
         if "db_manager" in st.session_state:
             show_sidebar_stats(st.session_state.db_manager)
         
         st.markdown("---")
         
-        # House legend
+        # Enhanced house legend
         st.markdown("""
         ### Houses
-        🔥 **Ignis** (Red)  
-        🌊 **Nereus** (Blue)  
-        💨 **Ventus** (Yellow)  
-        🌍 **Terra** (Green)
+        🔥 **Ignis** (Fire/Red)  
+        🌊 **Nereus** (Water/Blue)  
+        💨 **Ventus** (Air/Yellow)  
+        🌱 **Terra** (Earth/Green)
         """)
         
         st.markdown("---")
         
-        # Tips section
+        # Enhanced tips section
         st.markdown("""
-        ### Tips
-        - Search students by Bib ID for quick entry
-        - Results are automatically ranked
-        - Points update in real-time
-        - Export results as CSV
+        ### New Features
+        - **Gender-based rankings** for best male/female athletes
+        - **Flexible point systems** for different event types
+        - **Enhanced time input** (MM:SS.ms format)
+        - **Relay event support** with higher points
+        - **Individual athlete tracking** and performance analysis
         """)
         
         st.markdown("---")
-        st.markdown("*Built with Streamlit & Supabase*")
+        st.markdown("*Enhanced Sports Meet Manager v1.0*")
     
-    # Main content tabs with error handling
+    # Enhanced main content tabs
     try:
-        tab1, tab2, tab3, tab4 = st.tabs([
+        tab1, tab2, tab3, tab4, tab5 = st.tabs([
             "Students", 
             "Event Entry", 
             "Results", 
-            "House Points"
+            "House Points",
+            "Individual Athletes"
         ])
         
         with tab1:
@@ -318,6 +352,9 @@ def main():
         
         with tab4:
             show_house_points()
+        
+        with tab5:
+            show_individual_athletes()
             
     except Exception as e:
         st.error(f"Application error: {str(e)}")

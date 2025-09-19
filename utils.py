@@ -1,42 +1,68 @@
-"""Utility functions for the Sports Meet Management System"""
+"""Enhanced utility functions for the Sports Meet Management System"""
 
 import pandas as pd
 import streamlit as st
 from typing import List, Dict, Any
 import re
 
-def format_time(seconds: float) -> str:
-    """Convert seconds to MM:SS.ss format for display"""
+def format_time_for_display(seconds: float) -> str:
+    """Convert seconds to MM:SS.ms format for display"""
     if seconds < 60:
         return f"{seconds:.2f}s"
     else:
         minutes = int(seconds // 60)
-        secs = seconds % 60
-        return f"{minutes}:{secs:05.2f}"
+        remaining_seconds = seconds % 60
+        return f"{minutes}:{remaining_seconds:05.2f}"
 
 def parse_time_input(time_str: str) -> float:
-    """Parse time input in various formats to seconds"""
+    """Parse time input in MM:SS.ms format to seconds"""
     time_str = time_str.strip()
     
-    # Handle MM:SS.ss format
+    # Handle MM:SS.ms or MM:SS format
     if ':' in time_str:
         try:
             parts = time_str.split(':')
+            if len(parts) != 2:
+                raise ValueError("Invalid time format")
+            
             minutes = float(parts[0])
             seconds = float(parts[1])
-            return minutes * 60 + seconds
+            
+            if minutes < 0 or seconds < 0 or seconds >= 60:
+                raise ValueError("Invalid time values")
+            
+            total_seconds = minutes * 60 + seconds
+            return total_seconds
         except (ValueError, IndexError):
-            raise ValueError("Invalid time format. Use MM:SS or SS.ss")
+            raise ValueError("Invalid time format. Use MM:SS.ms (e.g., 1:23.45)")
     
-    # Handle seconds only
+    # Handle seconds only (for sub-minute times)
     try:
-        return float(time_str)
+        seconds = float(time_str)
+        if seconds <= 0:
+            raise ValueError("Time must be positive")
+        return seconds
     except ValueError:
-        raise ValueError("Invalid time format. Use MM:SS or SS.ss")
+        raise ValueError("Invalid time format. Use MM:SS.ms or seconds")
+
+def validate_time_input(time_str: str) -> bool:
+    """Validate time input format"""
+    try:
+        parse_time_input(time_str)
+        return True
+    except ValueError:
+        return False
+
+def validate_distance_input(distance_str: str) -> bool:
+    """Validate distance input for field events"""
+    try:
+        distance = float(distance_str)
+        return distance > 0
+    except ValueError:
+        return False
 
 def validate_curtin_id(curtin_id: str) -> bool:
-    """Validate Curtin ID format"""
-    # Assuming Curtin ID is 8 digits
+    """Validate Curtin ID format (8 digits)"""
     pattern = r'^\d{8}$'
     return bool(re.match(pattern, curtin_id))
 
@@ -47,6 +73,13 @@ def validate_bib_id(bib_id: str) -> bool:
         return num > 0
     except ValueError:
         return False
+
+def format_result_value(value: float, event_type: str) -> str:
+    """Format result value based on event type"""
+    if event_type == "Track":
+        return format_time_for_display(value)
+    else:  # Field events
+        return f"{value:.2f}m"
 
 def create_results_dataframe(results: List[Dict]) -> pd.DataFrame:
     """Create a formatted DataFrame from results data"""
@@ -70,29 +103,50 @@ def create_results_dataframe(results: List[Dict]) -> pd.DataFrame:
                 "Position": result.get("position", "N/A"),
                 "Curtin ID": student_data.get("curtin_id", "N/A"),
                 "Bib ID": student_data.get("bib_id", "N/A"),
-                "First Name": student_data.get("first_name", "Unknown"),
-                "Last Name": student_data.get("last_name", ""),
+                "Name": f"{student_data.get('first_name', 'Unknown')} {student_data.get('last_name', '')}",
                 "House": student_data.get("house", "Unknown"),
+                "Gender": student_data.get("gender", "N/A"),
                 "Event": event_data.get("event_name", "Unknown"),
+                "Event Type": event_data.get("event_type", "Unknown"),
                 "Result": format_result_value(
                     result.get("result_value", 0), 
                     event_data.get("event_type", "")
                 ),
-                "Points": result.get("points", 0)
+                "Points": result.get("points", 0),
+                "Is Relay": "Yes" if event_data.get("is_relay", False) else "No"
             })
         except Exception as e:
-            # Skip problematic records but log the issue
             print(f"Error processing result record: {e}")
             continue
     
     return pd.DataFrame(df_data)
 
-def format_result_value(value: float, event_type: str) -> str:
-    """Format result value based on event type"""
-    if event_type == "Running":
-        return format_time(value)
-    else:  # Throwing or Jumping
-        return f"{value:.2f}m"
+def create_athlete_performance_dataframe(athletes: List[Dict]) -> pd.DataFrame:
+    """Create DataFrame for individual athlete performance"""
+    if not athletes:
+        return pd.DataFrame()
+    
+    df_data = []
+    for athlete in athletes:
+        try:
+            df_data.append({
+                "Rank": athlete.get("overall_rank", athlete.get("gender_rank", "N/A")),
+                "Bib ID": athlete.get("bib_id", "N/A"),
+                "Name": f"{athlete.get('first_name', 'Unknown')} {athlete.get('last_name', '')}",
+                "House": athlete.get("house", "Unknown"),
+                "Gender": athlete.get("gender", "N/A"),
+                "Events": athlete.get("total_events", 0),
+                "Total Points": athlete.get("total_points", 0),
+                "Gold": athlete.get("gold_medals", 0),
+                "Silver": athlete.get("silver_medals", 0),
+                "Bronze": athlete.get("bronze_medals", 0),
+                "Total Medals": athlete.get("gold_medals", 0) + athlete.get("silver_medals", 0) + athlete.get("bronze_medals", 0)
+            })
+        except Exception as e:
+            print(f"Error processing athlete record: {e}")
+            continue
+    
+    return pd.DataFrame(df_data)
 
 def create_house_points_dataframe(house_points: List[Dict]) -> pd.DataFrame:
     """Create a formatted DataFrame from house points data"""
@@ -178,8 +232,17 @@ def export_results_to_csv(results: List[Dict], filename: str = "sports_meet_resu
     df = create_results_dataframe(results)
     return df.to_csv(index=False)
 
+def export_athletes_to_csv(athletes: List[Dict], filename: str = "athlete_performance.csv"):
+    """Export athlete performance to CSV format"""
+    if not athletes:
+        return None
+    
+    df = create_athlete_performance_dataframe(athletes)
+    return df.to_csv(index=False)
+
 def search_and_filter_results(results: List[Dict], search_term: str = "", 
-                            house_filter: str = "", event_filter: str = "") -> List[Dict]:
+                            house_filter: str = "", event_filter: str = "", 
+                            gender_filter: str = "") -> List[Dict]:
     """Filter results based on search criteria"""
     filtered_results = results
     
@@ -219,6 +282,22 @@ def search_and_filter_results(results: List[Dict], search_term: str = "",
                 continue
         filtered_results = temp_filtered
     
+    # Apply gender filter
+    if gender_filter and gender_filter != "All":
+        temp_filtered = []
+        for result in filtered_results:
+            try:
+                student_data = result.get("students", {})
+                if isinstance(student_data, list) and student_data:
+                    student_data = student_data[0]
+                
+                if student_data.get("gender") == gender_filter:
+                    temp_filtered.append(result)
+            except Exception as e:
+                print(f"Error filtering by gender: {e}")
+                continue
+        filtered_results = temp_filtered
+    
     # Apply event filter
     if event_filter and event_filter != "All":
         temp_filtered = []
@@ -236,3 +315,26 @@ def search_and_filter_results(results: List[Dict], search_term: str = "",
         filtered_results = temp_filtered
     
     return filtered_results
+
+def validate_point_allocation(point_allocation: Dict) -> bool:
+    """Validate point allocation dictionary"""
+    try:
+        # Check if all values are non-negative integers
+        for position, points in point_allocation.items():
+            if not isinstance(points, int) or points < 0:
+                return False
+        return True
+    except:
+        return False
+
+def get_time_input_placeholder(event_name: str) -> str:
+    """Get appropriate placeholder text for time input based on event"""
+    if any(distance in event_name for distance in ['100m', '200m', '400m']):
+        return "e.g., 12.34 (seconds)"
+    else:
+        return "e.g., 1:23.45 (MM:SS.ms)"
+
+def is_relay_event(event_name: str) -> bool:
+    """Check if an event is a relay event"""
+    relay_keywords = ['relay', '4x', '4 x']
+    return any(keyword in event_name.lower() for keyword in relay_keywords)
