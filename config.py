@@ -1,6 +1,4 @@
-"""Configuration settings for the Sports Meet Management System - Enhanced Version"""
-
-
+"""Configuration settings for the Sports Meet Management System - CORRECTED Points"""
 
 # Track events (use time in MM:SS.ms format)
 TRACK_EVENTS = [
@@ -18,14 +16,16 @@ FIELD_EVENTS = [
 # Relay events (different point allocation)
 RELAY_EVENTS = ["4x100m Relay", "4x400m Relay"]
 
-# Default point allocation for individual events
+# CORRECTED point allocation for individual events
+# Individual Events: 1st=10, 2nd=6, 3rd=3, 4th=1
 DEFAULT_INDIVIDUAL_POINTS = {
-    1: 10, 2: 8, 3: 6, 4: 5, 5: 4, 6: 3, 7: 2, 8: 1
+    1: 10, 2: 6, 3: 3, 4: 1
 }
 
-# Default point allocation for relay events (higher stakes)
+# CORRECTED point allocation for relay events  
+# Relay Events: 1st=15, 2nd=9, 3rd=5, 4th=3
 DEFAULT_RELAY_POINTS = {
-    1: 20, 2: 16, 3: 12, 4: 10, 5: 8, 6: 6, 7: 4, 8: 2
+    1: 15, 2: 9, 3: 5, 4: 3
 }
 
 # Point system templates
@@ -45,8 +45,6 @@ HOUSE_COLORS = {
     "Ventus": "#fce38a",   # Yellow
     "Terra": "#95e1d3"     # Green
 }
-
-
 
 # Streamlit page configuration
 PAGE_CONFIG = {

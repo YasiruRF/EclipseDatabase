@@ -1,5 +1,6 @@
 """
 Enhanced Main Streamlit application for Sports Meet Event Management System
+Updated to include Relay Team Management
 """
 
 import streamlit as st
@@ -22,6 +23,7 @@ try:
     from student_management import show_student_management
     from event_entry import show_event_entry
     from house_points import show_house_points
+    from relay_team_management import show_relay_team_management  # New import
 except ImportError as e:
     st.error(f"Failed to import page modules: {e}")
     st.stop()
@@ -120,48 +122,8 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-def check_environment():
-    """Check if required environment variables are set"""
-    required_vars = ["SUPABASE_URL", "SUPABASE_KEY"]
-    missing_vars = []
-    
-    for var in required_vars:
-        # Check both environment variables and Streamlit secrets
-        if not (os.getenv(var) or st.secrets.get(var, None)):
-            missing_vars.append(var)
-    
-    return missing_vars
-
-
-
-def show_database_setup():
-    """Show enhanced database setup instructions"""
-    st.markdown("""
-    ## Database Setup Required
-    
-    To use this application, you need to:
-    
-    ### 1. Set up Supabase Database
-    
-    Run the SQL commands from the `database_setup.sql` in your Supabase SQL editor to create the required tables.
-    
-    ### 2. Configure Environment Variables
-    
-    **For local development**, create a `.env` file:
-    ```
-    SUPABASE_URL=your_supabase_project_url
-    SUPABASE_KEY=your_supabase_anon_key
-    ```
-    
-    **For Streamlit Cloud deployment**, add these to your app secrets:
-    ```toml
-    SUPABASE_URL = "your_supabase_project_url"
-    SUPABASE_KEY = "your_supabase_anon_key"
-    ```
-    """)
-
 def main():
-    """Enhanced main application function"""
+    """Enhanced main application function with relay team management"""
     
     # App header
     st.markdown('<h1 class="main-header">Sports Meet Manager</h1>', unsafe_allow_html=True)
@@ -186,20 +148,23 @@ def main():
         # Enhanced tips section
         st.markdown("""
         ### Features
-        - **Simplified event management** for Track and Field events.
-        - **Flexible point systems** for individual and relay events.
-        - **Real-time leaderboard** for house points.
+        - **Student Management** for athlete registration
+        - **Individual Events** with flexible scoring
+        - **Relay Team Management** for team events
+        - **Real-time Leaderboards** for house competition
         """)
         
         st.markdown("---")
-        st.markdown("*Sports Meet Manager v2.0*")
+        st.markdown("*Sports Meet Manager v2.1*")
     
-    # Enhanced main content tabs
+    # Enhanced main content tabs - NOW INCLUDING RELAY TEAMS
     try:
-        tab1, tab2, tab3 = st.tabs([
-            "Students", 
-            "Event Entry", 
-            "House Points"
+        tab1, tab2, tab3, tab4, tab5 = st.tabs([
+            "👥 Students", 
+            "🏃 Individual Events", 
+            "🏃‍♂️🏃‍♀️ Relay Teams",  # NEW TAB
+            "🏆 House Points",
+            "📊 Analytics"
         ])
         
         with tab1:
@@ -209,7 +174,41 @@ def main():
             show_event_entry()
         
         with tab3:
+            show_relay_team_management()  # NEW FUNCTIONALITY
+        
+        with tab4:
             show_house_points()
+        
+        with tab5:
+            # You could add more detailed analytics here
+            st.header("📊 Detailed Analytics")
+            st.info("Advanced analytics features coming soon!")
+            
+            # For now, show a summary
+            if "db_manager" not in st.session_state:
+                st.session_state.db_manager = DatabaseManager()
+            
+            db = st.session_state.db_manager
+            
+            # Quick stats
+            col1, col2, col3, col4 = st.columns(4)
+            
+            with col1:
+                students = db.get_all_students()
+                st.metric("Total Students", len(students))
+            
+            with col2:
+                events = db.get_all_events()
+                individual_events = [e for e in events if not e.get('is_relay', False)]
+                st.metric("Individual Events", len(individual_events))
+            
+            with col3:
+                relay_events = [e for e in events if e.get('is_relay', False)]
+                st.metric("Relay Events", len(relay_events))
+            
+            with col4:
+                results = db.get_all_results()
+                st.metric("Total Results", len(results))
             
     except Exception as e:
         st.error(f"Application error: {str(e)}")

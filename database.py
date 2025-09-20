@@ -130,6 +130,19 @@ class DatabaseManager:
             self._handle_database_error("get_student_by_bib", e)
             return None
 
+    def get_student_by_curtin_id(self, curtin_id: str) -> Optional[Dict]:
+        """Get student details by Curtin ID"""
+        try:
+            result = self.supabase.table("students").select("*").eq("curtin_id", curtin_id).execute()
+            
+            if result.data:
+                return result.data[0]
+            return None
+            
+        except Exception as e:
+            self._handle_database_error("get_student_by_curtin_id", e)
+            return None
+
     def get_all_students(self) -> List[Dict]:
         """Get all students"""
         try:
@@ -450,18 +463,21 @@ class DatabaseManager:
         """Delete the last result for a given student."""
         try:
             # Get the last result for the student
-            last_result = self.supabase.table("results").select("result_id").eq("curtin_id", curtin_id).order("created_at", desc=True).limit(1).execute()
+            last_result = self.supabase.table("results").select("result_id, event_id").eq("curtin_id", curtin_id).order("created_at", desc=True).limit(1).execute()
             
             if not last_result.data:
                 st.warning("No results found for this student.")
                 return False
 
             result_id_to_delete = last_result.data[0]['result_id']
+            event_id = last_result.data[0]['event_id']
 
             # Delete the result
             delete_result = self.supabase.table("results").delete().eq("result_id", result_id_to_delete).execute()
 
             if delete_result:
+                # Recalculate positions and points for this event
+                self._calculate_positions_and_points(event_id)
                 logger.info(f"Result {result_id_to_delete} deleted successfully.")
                 return True
             else:
@@ -534,4 +550,88 @@ class DatabaseManager:
                 
         except Exception as e:
             self._handle_database_error("delete_result", e)
+            return False
+
+    def add_relay_team(self, team_name: str, house: str, event_id: int, 
+                      member1_id: str, member2_id: str, member3_id: str, member4_id: str) -> bool:
+        """Add a relay team to the database"""
+        try:
+            result = self.supabase.table("relay_teams").insert({
+                "team_name": team_name,
+                "house": house,
+                "event_id": event_id,
+                "member1_curtin_id": member1_id,
+                "member2_curtin_id": member2_id,
+                "member3_curtin_id": member3_id,
+                "member4_curtin_id": member4_id
+            }).execute()
+            
+            if result.data:
+                logger.info(f"Relay team added successfully: {team_name}")
+                return True
+            else:
+                logger.warning("Relay team insert returned no data")
+                return False
+                
+        except Exception as e:
+            self._handle_database_error("add_relay_team", e)
+            return False
+
+    def add_relay_team_result(self, team_id: int, result_value: float) -> bool:
+        """Add result for a relay team and calculate points"""
+        try:
+            # Update the team with the result
+            result = self.supabase.table("relay_teams").update({
+                "result_value": float(result_value)
+            }).eq("team_id", team_id).execute()
+            
+            if result.data:
+                # Get the event_id to recalculate positions and points
+                team_data = self.supabase.table("relay_teams").select("event_id").eq("team_id", team_id).execute()
+                if team_data.data:
+                    event_id = team_data.data[0]["event_id"]
+                    # Call the database function to calculate relay positions and points
+                    self.supabase.rpc("calculate_relay_team_points", {"event_id_param": event_id}).execute()
+                
+                logger.info(f"Relay team result added successfully for team {team_id}")
+                return True
+            else:
+                logger.warning("Relay team result update returned no data")
+                return False
+                
+        except Exception as e:
+            self._handle_database_error("add_relay_team_result", e)
+            return False
+
+    def get_relay_teams_by_event(self, event_id: int) -> List[Dict]:
+        """Get all relay teams for a specific event"""
+        try:
+            result = self.supabase.table("relay_team_results").select("*").eq("event_id", event_id).order("position", desc=False).execute()
+            return result.data or []
+            
+        except Exception as e:
+            self._handle_database_error("get_relay_teams_by_event", e)
+            return []
+
+    def get_complete_house_points(self) -> List[Dict]:
+        """Get complete house points including relay team points"""
+        try:
+            result = self.supabase.table("complete_house_points").select("*").execute()
+            return result.data or []
+            
+        except Exception as e:
+            self._handle_database_error("get_complete_house_points", e)
+            return []
+
+    def recalculate_all_points(self) -> bool:
+        """Manually trigger recalculation of all points"""
+        try:
+            result = self.supabase.rpc("recalculate_all_points_correct").execute()
+            if result.data:
+                logger.info("All points recalculated successfully")
+                return True
+            return False
+            
+        except Exception as e:
+            self._handle_database_error("recalculate_all_points", e)
             return False
