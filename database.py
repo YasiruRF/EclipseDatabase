@@ -499,30 +499,82 @@ class DatabaseManager:
 
     # ------------------- Result Operations (Updated to use bib_id) -------------------
     def add_result(self, bib_id: int, event_id: int, result_value: float) -> bool:
-        """Add result using bib_id instead of curtin_id"""
+        """Add result using bib_id or curtin_id fallback"""
         try:
-            # Check if result already exists
-            existing = self.supabase.table("results").select("*").eq("bib_id", bib_id).eq("event_id", event_id).execute()
+            # Validate inputs first
+            if not bib_id or not event_id or result_value is None:
+                st.error("Missing required data for result entry")
+                return False
+                
+            # Validate student exists
+            student = self.get_student_by_bib(bib_id)
+            if not student:
+                st.error(f"No student found with Bib ID {bib_id}")
+                return False
+            
+            # Try bib_id first, fallback to curtin_id if column doesn't exist
+            try:
+                # Check if result already exists using bib_id
+                existing = self.supabase.table("results").select("*").eq("bib_id", bib_id).eq("event_id", event_id).execute()
+                use_bib_id = True
+            except Exception as e:
+                if "column" in str(e).lower() and "bib_id" in str(e).lower():
+                    # bib_id column doesn't exist yet, use curtin_id
+                    existing = self.supabase.table("results").select("*").eq("curtin_id", student["curtin_id"]).eq("event_id", event_id).execute()
+                    use_bib_id = False
+                else:
+                    raise e
+            
             if existing.data:
                 st.error("A result for this student in this event already exists.")
                 return False
             
-            result = self.supabase.table("results").insert({
-                "bib_id": bib_id,
-                "event_id": event_id,
-                "result_value": float(result_value),
-                "points": 0,
-                "position": 999
-            }).execute()
+            # Prepare insert data based on which column exists
+            if use_bib_id:
+                insert_data = {
+                    "bib_id": int(bib_id),
+                    "event_id": int(event_id),
+                    "result_value": float(result_value),
+                    "points": 0,
+                    "position": 999
+                }
+            else:
+                insert_data = {
+                    "curtin_id": student["curtin_id"],
+                    "event_id": int(event_id),
+                    "result_value": float(result_value),
+                    "points": 0,
+                    "position": 999
+                }
+            
+            result = self.supabase.table("results").insert(insert_data).execute()
             
             if result.data:
-                # Recalculate positions and points for this event with gender-specific logic
-                self._calculate_gender_specific_positions(event_id)
+                # Recalculate positions and points for this event
+                if use_bib_id:
+                    self._calculate_gender_specific_positions(event_id)
+                else:
+                    # Fallback to old calculation if using curtin_id
+                    self._calculate_positions_and_points(event_id)
                 logger.info(f"Result added successfully for bib #{bib_id} in event {event_id}")
                 return True
-            return False
+            else:
+                st.error("Failed to insert result - no data returned")
+                return False
         except Exception as e:
-            self._handle_database_error("add_result", e)
+            error_msg = str(e).lower()
+            if "not-null constraint" in error_msg or "null value" in error_msg:
+                st.error("Missing required field. Please contact administrator.")
+            elif "foreign key" in error_msg:
+                st.error("Invalid student or event reference.")
+            elif "duplicate key" in error_msg or "unique" in error_msg:
+                st.error("This student already has a result for this event.")
+            elif "column" in error_msg and "does not exist" in error_msg:
+                st.error("Database schema issue. Please contact administrator.")
+            else:
+                st.error(f"Database error: {str(e)}")
+            
+            logger.error(f"Error in add_result: {str(e)}")
             return False
 
     def _calculate_gender_specific_positions(self, event_id: int):
