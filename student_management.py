@@ -1,4 +1,4 @@
-"""Enhanced Student Management Page with Gender Field"""
+"""Fixed Student Management Page with proper error handling for new schema"""
 
 import streamlit as st
 from database import DatabaseManager
@@ -336,100 +336,147 @@ def filter_students(students, search_term="", house_filter="All", gender_filter=
     return filtered
 
 def show_top_athletes(db: DatabaseManager):
-    """Display top individual athletes"""
+    """Display top individual athletes with proper error handling"""
     st.subheader("🏆 Top Individual Athletes")
     
-    # Get individual athlete performance
-    athletes = db.get_top_individual_athletes(limit=20)
-    
-    if not athletes:
-        display_warning_message("No athlete performance data available yet. Add some results first!")
-        return
-    
-    # Display overall top athletes
-    st.markdown("### 🎯 Overall Top Athletes")
-    
-    # Create tabs for different rankings
-    tab1, tab2, tab3 = st.tabs(["🏆 Overall Rankings", "👨 Best Male Athletes", "👩 Best Female Athletes"])
-    
-    with tab1:
-        display_athlete_ranking(athletes, "Overall Top 10", limit=10)
-    
-    with tab2:
-        male_athletes = [a for a in athletes if a.get('gender') == 'Male']
-        display_athlete_ranking(male_athletes, "Top Male Athletes", limit=10)
-    
-    with tab3:
-        female_athletes = [a for a in athletes if a.get('gender') == 'Female']
-        display_athlete_ranking(female_athletes, "Top Female Athletes", limit=10)
-    
-    # Best athletes by gender summary
-    st.markdown("---")
-    st.markdown("### 🥇 Champions")
-    
-    best_athletes = db.get_best_athletes_by_gender()
-    
-    best_gender_keys = [k for k in best_athletes.keys() if k in ['Male', 'Female']]
-    if best_gender_keys:
-        cols = st.columns(len(best_gender_keys))
-        col_idx = 0
+    try:
+        # Get individual athlete performance with error handling
+        athletes = db.get_top_individual_athletes(limit=20)
+        
+        if not athletes:
+            display_warning_message("No athlete performance data available yet. Add some results first!")
+            return
+        
+        # Display overall top athletes
+        st.markdown("### 🎯 Overall Top Athletes")
+        
+        # Create tabs for different rankings
+        tab1, tab2, tab3 = st.tabs(["🏆 Overall Rankings", "👨 Best Male Athletes", "👩 Best Female Athletes"])
+        
+        with tab1:
+            display_athlete_ranking(athletes, "Overall Top 10", limit=10)
+        
+        with tab2:
+            male_athletes = [a for a in athletes if a.get('gender') == 'Male']
+            display_athlete_ranking(male_athletes, "Top Male Athletes", limit=10)
+        
+        with tab3:
+            female_athletes = [a for a in athletes if a.get('gender') == 'Female']
+            display_athlete_ranking(female_athletes, "Top Female Athletes", limit=10)
+        
+        # Best athletes by gender summary
+        st.markdown("---")
+        st.markdown("### 🥇 Champions")
+        
+        try:
+            best_athletes = db.get_best_athletes_by_gender()
+            
+            if best_athletes:
+                cols = st.columns(min(len(best_athletes), 2))
+                col_idx = 0
 
-        for gender in ['Male', 'Female']:
-            if gender in best_athletes:
-                athlete = best_athletes[gender]
-                house_emoji = {"Ignis": "🔥", "Nereus": "🌊", "Ventus": "💨", "Terra": "🌱"}
-                house_icon = house_emoji.get(athlete['house'], "🏆")
+                for gender in ['Male', 'Female']:
+                    if gender in best_athletes:
+                        athlete = best_athletes[gender]
+                        house_emoji = {"Ignis": "🔥", "Nereus": "🌊", "Ventus": "💨", "Terra": "🌱"}
+                        house_icon = house_emoji.get(athlete.get('house', 'Unknown'), "🏆")
 
-                with cols[col_idx]:
-                    st.markdown(f"""
-                    #### 🏆 Best {gender} Athlete
-                    **{athlete['first_name']} {athlete['last_name']}**
-                    - **House:** {house_icon} {athlete['house']}
-                    - **Bib ID:** {athlete['bib_id']}
-                    - **Total Points:** {athlete['total_points']}
-                    - **Gold Medals:** {athlete['gold_medals']}
-                    - **Events:** {athlete['total_events']}
-                    """)
-                col_idx += 1
-    else:
-        st.info("No best athletes available for Male or Female yet.")
+                        with cols[col_idx]:
+                            # Safe access to athlete data with defaults
+                            total_points = athlete.get('total_individual_points', athlete.get('total_points', 0))
+                            gold_medals = athlete.get('individual_gold', athlete.get('gold_medals', 0))
+                            total_events = athlete.get('individual_events', athlete.get('total_events', 0))
+                            
+                            st.markdown(f"""
+                            #### 🏆 Best {gender} Athlete
+                            **{athlete.get('first_name', 'Unknown')} {athlete.get('last_name', '')}**
+                            - **House:** {house_icon} {athlete.get('house', 'Unknown')}
+                            - **Bib ID:** {athlete.get('bib_id', 'N/A')}
+                            - **Total Points:** {total_points}
+                            - **Gold Medals:** {gold_medals}
+                            - **Events:** {total_events}
+                            """)
+                        col_idx += 1
+                        if col_idx >= len(cols):
+                            break
+            else:
+                st.info("No best athletes data available yet.")
+        except Exception as e:
+            st.error(f"Error loading best athletes: {str(e)}")
+            
+    except Exception as e:
+        st.error(f"Error loading athlete data: {str(e)}")
+        st.info("This might be due to the recent database schema changes. Please try refreshing or check the database connection.")
 
 def display_athlete_ranking(athletes: List[Dict], title: str, limit: int = 10):
-    """Display athlete ranking table"""
+    """Display athlete ranking table with proper error handling"""
     if not athletes:
         display_warning_message("No athlete data available.")
         return
     
-    # Limit results
-    display_athletes = athletes[:limit]
-    
-    # Create and display DataFrame
-    from utils import create_athlete_performance_dataframe
-    df = create_athlete_performance_dataframe(display_athletes)
-    
-    if not df.empty:
-        # Style the dataframe
-        def highlight_top_3(row):
-            rank = row.get("Rank", 999)
-            if rank == 1:
-                return ['background-color: #FFD700; font-weight: bold'] * len(row)  # Gold
-            elif rank == 2:
-                return ['background-color: #C0C0C0; font-weight: bold'] * len(row)  # Silver
-            elif rank == 3:
-                return ['background-color: #CD7F32; font-weight: bold'] * len(row)  # Bronze
-            else:
-                return [''] * len(row)
+    try:
+        # Limit results
+        display_athletes = athletes[:limit]
         
-        styled_df = df.style.apply(highlight_top_3, axis=1)
-        st.dataframe(styled_df, use_container_width=True, hide_index=True)
+        # Create DataFrame with safe data access
+        df_data = []
+        for i, athlete in enumerate(display_athletes):
+            # Use safe access with defaults
+            rank = athlete.get('overall_rank', athlete.get('gender_rank', i + 1))
+            bib_id = athlete.get('bib_id', 'N/A')
+            first_name = athlete.get('first_name', 'Unknown')
+            last_name = athlete.get('last_name', '')
+            house = athlete.get('house', 'Unknown')
+            gender = athlete.get('gender', 'Unknown')
+            total_events = athlete.get('individual_events', athlete.get('total_events', 0))
+            total_points = athlete.get('total_individual_points', athlete.get('total_points', 0))
+            gold_medals = athlete.get('individual_gold', athlete.get('gold_medals', 0))
+            silver_medals = athlete.get('individual_silver', athlete.get('silver_medals', 0))
+            bronze_medals = athlete.get('individual_bronze', athlete.get('bronze_medals', 0))
+            
+            df_data.append({
+                "Rank": rank,
+                "Bib ID": bib_id,
+                "Name": f"{first_name} {last_name}",
+                "House": house,
+                "Gender": gender,
+                "Events": total_events,
+                "Total Points": total_points,
+                "Gold": gold_medals,
+                "Silver": silver_medals,
+                "Bronze": bronze_medals,
+                "Total Medals": gold_medals + silver_medals + bronze_medals
+            })
         
-        # Export option
-        from utils import export_athletes_to_csv
-        csv = export_athletes_to_csv(display_athletes)
-        if csv:
+        if df_data:
+            df = pd.DataFrame(df_data)
+            
+            # Style the dataframe
+            def highlight_top_3(row):
+                rank = row.get("Rank", 999)
+                if rank == 1:
+                    return ['background-color: #FFD700; font-weight: bold'] * len(row)  # Gold
+                elif rank == 2:
+                    return ['background-color: #C0C0C0; font-weight: bold'] * len(row)  # Silver
+                elif rank == 3:
+                    return ['background-color: #CD7F32; font-weight: bold'] * len(row)  # Bronze
+                else:
+                    return [''] * len(row)
+            
+            styled_df = df.style.apply(highlight_top_3, axis=1)
+            st.dataframe(styled_df, use_container_width=True, hide_index=True)
+            
+            # Export option
+            csv = df.to_csv(index=False)
             st.download_button(
                 label=f"📥 Download {title}",
                 data=csv,
                 file_name=f"{title.replace(' ', '_').lower()}.csv",
                 mime="text/csv"
             )
+        else:
+            display_warning_message("No ranking data available.")
+            
+    except Exception as e:
+        st.error(f"Error displaying athlete rankings: {str(e)}")
+        st.info("This might be due to the recent database schema changes.")
