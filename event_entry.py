@@ -1,4 +1,4 @@
-"""Simplified Event Entry with Better Error Handling for Migration Issues"""
+"""Fixed Event Entry with No Recursion Issues"""
 
 import streamlit as st
 from database import DatabaseManager
@@ -12,8 +12,8 @@ from utils import (
 )
 
 def show_event_entry():
-    """Simplified event entry interface with better error handling"""
-    st.header("🏃‍♂️ Event Entry & Results")
+    """Main event entry interface"""
+    st.header("Event Entry & Results")
     
     # Initialize database manager
     if "db_manager" not in st.session_state:
@@ -30,7 +30,12 @@ def show_event_entry():
     if not verify_system_setup(db):
         return
     
+    # Main result entry form
     show_result_entry_form(db)
+    
+    # Show recent results
+    st.markdown("---")
+    show_recent_results(db)
 
 def verify_system_setup(db: DatabaseManager):
     """Verify that the system is properly set up"""
@@ -38,13 +43,13 @@ def verify_system_setup(db: DatabaseManager):
         # Check if we have students
         students = db.get_all_students()
         if not students:
-            st.warning("⚠️ No students found in database. Please add students first.")
+            st.warning("No students found in database. Please add students first.")
             return False
         
         # Check if we have events
         events = db.get_all_events()
         if not events:
-            st.warning("⚠️ No events found in database. Please add events first.")
+            st.warning("No events found in database. Please add events first.")
             if st.button("Initialize Basic Events"):
                 initialize_basic_events(db)
                 st.rerun()
@@ -82,12 +87,12 @@ def initialize_basic_events(db: DatabaseManager):
             st.error(f"Failed to add {event_info['name']}: {str(e)}")
 
 def show_result_entry_form(db: DatabaseManager):
-    """Display simplified form to record event results"""
+    """Display form to record event results"""
     st.subheader("Record Event Result")
 
     # Student search panel
     with st.container():
-        st.markdown("### 🔍 Student Search")
+        st.markdown("### Student Search")
 
         bib_id_input = st.text_input(
             "Enter Bib ID",
@@ -109,9 +114,9 @@ def show_result_entry_form(db: DatabaseManager):
 
     if 'student_info' in st.session_state and st.session_state.student_info:
         student_info = st.session_state.student_info
-        st.success("✅ Student Found!")
+        st.success("Student Found!")
         
-        # Display student info with gender
+        # Display student info
         col1, col2, col3 = st.columns(3)
         with col1:
             st.info(f"**Name:** {student_info.get('first_name', '')} {student_info.get('last_name', '')}")
@@ -119,16 +124,14 @@ def show_result_entry_form(db: DatabaseManager):
             st.info(f"**House:** {student_info.get('house', 'Unknown')}")
         with col3:
             gender = student_info.get('gender', 'Not specified')
-            gender_emoji = {"Male": "👨", "Female": "👩", "Other": "🧑"}
-            gender_icon = gender_emoji.get(gender, "🧑")
-            st.info(f"**Gender:** {gender_icon} {gender}")
+            st.info(f"**Gender:** {gender}")
             
         if st.button("Clear Student"):
             del st.session_state.student_info
             st.rerun()
 
         st.markdown("---")
-        st.markdown("### 🎯 Event Selection & Result Entry")
+        st.markdown("### Event Selection & Result Entry")
 
         # Gender competition info
         if gender in ["Male", "Female"]:
@@ -141,14 +144,11 @@ def show_result_entry_form(db: DatabaseManager):
                 display_warning_message("No events available.")
                 return
             
-            event_options = [(event['event_name'], event) for event in events]
-            selected_event_name, selected_event = st.selectbox(
-                "Select Event",
-                options=event_options,
-                format_func=lambda x: x[0]
-            )
+            event_names = [event['event_name'] for event in events]
+            selected_event_name = st.selectbox("Select Event", event_names)
             
-            if selected_event:
+            if selected_event_name:
+                selected_event = next(e for e in events if e['event_name'] == selected_event_name)
                 display_event_form(db, student_info, selected_event)
                 
         except Exception as e:
@@ -164,7 +164,7 @@ def display_event_form(db: DatabaseManager, student_info: dict, event: dict):
         gender = student_info.get('gender', 'Unknown')
         st.info(f"**Competition Category:** {gender} - This athlete will compete against other {gender.lower()} athletes")
 
-    with st.form("result_entry_form", clear_on_submit=True):
+    with st.form("result_entry_form"):
         # Input based on event type
         if event['unit'] == 'time':
             result_input = st.text_input(
@@ -183,9 +183,9 @@ def display_event_form(db: DatabaseManager, student_info: dict, event: dict):
 
         col1, col2 = st.columns(2)
         with col1:
-            submitted = st.form_submit_button("🏆 Submit Result", type="primary")
+            submitted = st.form_submit_button("Submit Result", type="primary")
         with col2:
-            delete_last = st.form_submit_button("🗑️ Delete Last Result")
+            delete_last = st.form_submit_button("Delete Last Result")
 
         if delete_last:
             try:
@@ -203,7 +203,7 @@ def display_event_form(db: DatabaseManager, student_info: dict, event: dict):
                 # Validate and process input
                 if event['unit'] == 'time':
                     if not result_input or not validate_time_input(result_input):
-                        display_error_message("Please enter a valid time format (e.g., 12.34 or 1:23.45)")
+                        display_error_message("Please enter a valid time format")
                         return
                     processed_result = parse_time_input(result_input)
                 else:
@@ -220,38 +220,27 @@ def display_event_form(db: DatabaseManager, student_info: dict, event: dict):
                 )
 
                 if success:
-                    gender = student_info.get('gender', 'Unknown')
-                    display_success_message(f"Result recorded successfully for {student_info.get('first_name', '')} {student_info.get('last_name', '')} ({gender} competition)!")
-                    
-                    # Show what happened
-                    if event.get('is_relay', False):
-                        st.info("Note: This is a relay event. Individual times are recorded but teams compete together.")
-                    else:
-                        st.info(f"Result recorded in {gender} competition category.")
-                    
+                    display_success_message(f"Result recorded successfully!")
                     st.rerun()
                 else:
-                    display_error_message("Failed to record result. Please try again.")
+                    display_error_message("Failed to record result.")
                     
             except Exception as e:
                 display_error_message(f"Error recording result: {str(e)}")
-                st.error("This might be due to database constraints. Common issues:")
-                st.write("- Student may already have a result for this event")
-                st.write("- Database connection issues")
-                st.write("- Missing required fields")
+                st.info("Common issues: Student may already have a result for this event, or database constraints.")
 
 def show_recent_results(db: DatabaseManager):
     """Show recent results for verification"""
     try:
-        st.markdown("### 📊 Recent Results")
+        st.markdown("### Recent Results")
         results = db.get_all_results()
         
         if not results:
             st.info("No results recorded yet.")
             return
         
-        # Show last 10 results
-        recent_results = results[-10:] if len(results) > 10 else results
+        # Show last 5 results
+        recent_results = results[-5:] if len(results) > 5 else results
         
         for result in reversed(recent_results):
             try:
@@ -272,32 +261,14 @@ def show_recent_results(db: DatabaseManager):
                 
                 # Format result value
                 if event_data.get('unit') == 'time':
-                    if result_value < 60:
-                        formatted_result = f"{result_value:.2f}s"
-                    else:
-                        minutes = int(result_value // 60)
-                        seconds = result_value % 60
-                        formatted_result = f"{minutes}:{seconds:05.2f}"
+                    formatted_result = f"{result_value:.2f}s"
                 else:
                     formatted_result = f"{result_value:.2f}m"
                 
-                st.write(f"**{student_name}** - {event_name}: {formatted_result} (Position: {position}, Points: {points})")
+                st.write(f"**{student_name}** - {event_name}: {formatted_result} (Pos: {position}, Points: {points})")
                 
             except Exception as e:
                 st.write(f"Error displaying result: {str(e)}")
                 
     except Exception as e:
         st.error(f"Error loading recent results: {str(e)}")
-
-# Add this to the main show_event_entry function
-def show_event_entry_enhanced():
-    """Enhanced event entry with recent results"""
-    show_event_entry()
-    
-    # Add recent results section
-    if "db_manager" in st.session_state:
-        st.markdown("---")
-        show_recent_results(st.session_state.db_manager)
-
-# For backward compatibility, keep the original function name
-show_event_entry = show_event_entry_enhanced
