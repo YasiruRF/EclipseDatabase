@@ -342,7 +342,8 @@ def show_top_athletes(db: DatabaseManager):
     st.subheader("🏆 Top Individual Athletes")
     
     # Get individual athlete performance
-    athletes = db.get_individual_athlete_performance(limit=20)
+    athletes = db.get_individual_athlete_results()
+    athletes = athletes[:20]
     
     if not athletes:
         display_warning_message("No athlete performance data available yet. Add some results first!")
