@@ -446,6 +446,31 @@ class DatabaseManager:
             self._handle_database_error("get_best_athletes_by_gender", e)
             return {}
 
+    def delete_last_result(self, curtin_id: str) -> bool:
+        """Delete the last result for a given student."""
+        try:
+            # Get the last result for the student
+            last_result = self.supabase.table("results").select("result_id").eq("curtin_id", curtin_id).order("created_at", desc=True).limit(1).execute()
+            
+            if not last_result.data:
+                st.warning("No results found for this student.")
+                return False
+
+            result_id_to_delete = last_result.data[0]['result_id']
+
+            # Delete the result
+            delete_result = self.supabase.table("results").delete().eq("result_id", result_id_to_delete).execute()
+
+            if delete_result:
+                logger.info(f"Result {result_id_to_delete} deleted successfully.")
+                return True
+            else:
+                return False
+
+        except Exception as e:
+            self._handle_database_error("delete_last_result", e)
+            return False
+
     def get_all_results(self) -> List[Dict]:
         """Get all results with student and event details"""
         try:

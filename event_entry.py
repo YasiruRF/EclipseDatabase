@@ -42,21 +42,22 @@ def show_result_entry_form(db: DatabaseManager):
             key="result_entry_bib"
         )
 
-        student_info = None
         if bib_id_input and validate_bib_id(bib_id_input):
-            student_info = db.get_student_by_bib(int(bib_id_input))
-            if student_info:
-                st.success("✅ Student Found!")
-                st.info(f"**Name:** {student_info.get('first_name', '')} {student_info.get('last_name', '')}")
-            else:
-                display_error_message("Student not found. Please check the Bib ID.")
-                return
-        elif bib_id_input and not validate_bib_id(bib_id_input):
-            display_error_message("Please enter a valid Bib ID")
-            return
+            if 'student_info' not in st.session_state or st.session_state.student_info['bib_id'] != int(bib_id_input):
+                student_info = db.get_student_by_bib(int(bib_id_input))
+                if student_info:
+                    st.session_state.student_info = student_info
+                else:
+                    st.session_state.student_info = None
 
-    # Event selection and result entry
-    if student_info:
+    if 'student_info' in st.session_state and st.session_state.student_info:
+        student_info = st.session_state.student_info
+        st.success("✅ Student Found!")
+        st.info(f"**Name:** {student_info.get('first_name', '')} {student_info.get('last_name', '')}")
+        if st.button("Clear Student"):
+            del st.session_state.student_info
+            st.rerun()
+
         st.markdown("---")
         st.markdown("### 🎯 Event Selection & Result Entry")
 
@@ -99,10 +100,14 @@ def show_result_entry_form(db: DatabaseManager):
                         result_value = distance_input
 
                     submitted = st.form_submit_button("🏆 Submit Result")
+                    if st.form_submit_button("🗑️ Delete Last Result"):
+                        success = db.delete_last_result(student_info["curtin_id"])
+                        if success:
+                            display_success_message("Last result deleted successfully!")
 
                     if submitted:
                         if event_details['unit'] == 'time':
-                            if not result_value or not validate_time_input(result_value):  # ✅ fixed typo
+                            if not result_value or not validate_time_input(result_value):
                                 display_error_message("Invalid time format.")
                                 return
                             processed_result = parse_time_input(result_value)
@@ -126,4 +131,6 @@ def show_result_entry_form(db: DatabaseManager):
 
                         if success:
                             display_success_message("Result recorded successfully!")
+                            if 'selected_event_name' in st.session_state:
+                                del st.session_state.selected_event_name
                             st.rerun()
