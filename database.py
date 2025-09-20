@@ -177,6 +177,20 @@ class DatabaseManager:
             self._handle_database_error("get_top_individual_athletes", e)
             return []
 
+    def get_best_athletes_by_gender(self, limit: int = 10) -> Dict[str, List[Dict]]:
+        try:
+            all_athletes = self.get_top_individual_athletes(limit=None)  # Get all athletes to filter by gender
+            male_athletes = [a for a in all_athletes if a.get("gender", "").lower() == "male"]
+            female_athletes = [a for a in all_athletes if a.get("gender", "").lower() == "female"]
+
+            return {
+                "male": male_athletes[:limit],
+                "female": female_athletes[:limit]
+            }
+        except Exception as e:
+            self._handle_database_error("get_best_athletes_by_gender", e)
+            return {"male": [], "female": []}
+
     # ------------------- Event Operations -------------------
     def add_event(self, event_name: str, event_type: str, unit: str, 
                   is_relay: bool = False, point_allocation: Dict = None, 
