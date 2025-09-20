@@ -497,7 +497,6 @@ class DatabaseManager:
             self._handle_database_error("get_all_events", e)
             return []
 
-    # ------------------- Result Operations (Updated to use bib_id) -------------------
     def add_result(self, bib_id: int, event_id: int, result_value: float) -> bool:
         """Add result using bib_id or curtin_id fallback"""
         try:
@@ -536,7 +535,8 @@ class DatabaseManager:
                     "event_id": int(event_id),
                     "result_value": float(result_value),
                     "points": 0,
-                    "position": 999
+                    "position": 999,
+                    "house": student["house"]  # Add house from student data
                 }
             else:
                 insert_data = {
@@ -544,7 +544,8 @@ class DatabaseManager:
                     "event_id": int(event_id),
                     "result_value": float(result_value),
                     "points": 0,
-                    "position": 999
+                    "position": 999,
+                    "house": student["house"]  # Add house from student data
                 }
             
             result = self.supabase.table("results").insert(insert_data).execute()
