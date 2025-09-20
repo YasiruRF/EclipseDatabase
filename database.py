@@ -138,6 +138,45 @@ class DatabaseManager:
             self._handle_database_error("get_all_students", e)
             return []
 
+    def get_top_individual_athletes(self, limit: int = 20) -> List[Dict]:
+        try:
+            # Fetch all individual results with student and event details
+            results_query = self.supabase.table("results").select("""
+                *,
+                students!inner(curtin_id, first_name, last_name, house, gender),
+                events!inner(event_name, event_type, unit, is_relay)
+            """).execute()
+
+            if not results_query.data:
+                return []
+
+            student_points = {}
+            for res in results_query.data:
+                student_id = res["students"]["curtin_id"]
+                points = res.get("points", 0)
+
+                if student_id not in student_points:
+                    student_points[student_id] = {
+                        "curtin_id": student_id,
+                        "first_name": res["students"]["first_name"],
+                        "last_name": res["students"]["last_name"],
+                        "house": res["students"]["house"],
+                        "gender": res["students"]["gender"],
+                        "total_points": 0,
+                        "events_participated": 0
+                    }
+                student_points[student_id]["total_points"] += points
+                student_points[student_id]["events_participated"] += 1
+
+            # Convert to list and sort by total_points
+            top_athletes = sorted(student_points.values(), key=lambda x: x["total_points"], reverse=True)
+
+            return top_athletes[:limit]
+
+        except Exception as e:
+            self._handle_database_error("get_top_individual_athletes", e)
+            return []
+
     # ------------------- Event Operations -------------------
     def add_event(self, event_name: str, event_type: str, unit: str, 
                   is_relay: bool = False, point_allocation: Dict = None, 
