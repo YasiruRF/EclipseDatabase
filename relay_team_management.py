@@ -1,6 +1,5 @@
 """
-Relay Team Management Interface
-Add this as a new file: relay_team_management.py
+Updated Relay Team Management Interface - Using Bib ID as Primary Key
 """
 
 import streamlit as st
@@ -9,6 +8,7 @@ from config import HOUSES
 from utils import (
     validate_time_input, 
     parse_time_input,
+    validate_bib_id,
     display_success_message, 
     display_error_message,
     display_warning_message
@@ -16,7 +16,7 @@ from utils import (
 import pandas as pd
 
 def show_relay_team_management():
-    """Display relay team management interface"""
+    """Display relay team management interface using bib IDs"""
     st.header("🏃‍♂️🏃‍♀️ Relay Team Management")
     
     # Initialize database manager
@@ -24,6 +24,9 @@ def show_relay_team_management():
         st.session_state.db_manager = DatabaseManager()
     
     db = st.session_state.db_manager
+    
+    # Gender-mixed relay info
+    st.info("**Relay Team Rules:** Teams can be mixed-gender and compete together in a single category. All relay events use the same point system (1st=15pts, 2nd=9pts, 3rd=5pts, 4th=3pts)")
     
     # Create tabs for different relay operations
     tab1, tab2, tab3, tab4 = st.tabs(["➕ Register Team", "🎯 Record Results", "📊 Team Results", "🏆 Relay Standings"])
@@ -41,7 +44,7 @@ def show_relay_team_management():
         show_relay_standings(db)
 
 def show_relay_team_registration(db: DatabaseManager):
-    """Display form to register relay teams"""
+    """Display form to register relay teams using bib IDs"""
     st.subheader("Register Relay Team")
     
     # Get relay events
@@ -76,12 +79,38 @@ def show_relay_team_registration(db: DatabaseManager):
         
         with col2:
             st.markdown("#### Team Members")
-            st.markdown("*Enter Curtin IDs for each team member*")
+            st.markdown("*Enter Bib IDs for each team member*")
             
-            member1_id = st.text_input("Member 1 Curtin ID", placeholder="12345678")
-            member2_id = st.text_input("Member 2 Curtin ID", placeholder="12345679")
-            member3_id = st.text_input("Member 3 Curtin ID", placeholder="12345680")
-            member4_id = st.text_input("Member 4 Curtin ID", placeholder="12345681")
+            member1_bib = st.text_input("Member 1 Bib ID", placeholder="101")
+            member2_bib = st.text_input("Member 2 Bib ID", placeholder="102")
+            member3_bib = st.text_input("Member 3 Bib ID", placeholder="103")
+            member4_bib = st.text_input("Member 4 Bib ID", placeholder="104")
+        
+        # Member validation area
+        if member1_bib or member2_bib or member3_bib or member4_bib:
+            st.markdown("#### Member Validation")
+            member_bibs = [member1_bib, member2_bib, member3_bib, member4_bib]
+            valid_members = []
+            
+            for i, bib in enumerate(member_bibs, 1):
+                if bib and validate_bib_id(bib):
+                    student = db.get_student_by_bib(int(bib))
+                    if student:
+                        gender_icon = {"Male": "👨", "Female": "👩", "Other": "🧑"}.get(student.get('gender'), "🧑")
+                        st.success(f"Member {i}: {student['first_name']} {student['last_name']} ({gender_icon} {student.get('gender', 'Unknown')}) - {student['house']} House")
+                        valid_members.append(student)
+                    else:
+                        st.error(f"Member {i}: No student found with Bib ID {bib}")
+                elif bib:
+                    st.error(f"Member {i}: Invalid Bib ID format")
+            
+            # Check house consistency
+            if len(valid_members) > 1:
+                houses = set(member['house'] for member in valid_members)
+                if len(houses) > 1:
+                    st.error("⚠️ All team members must be from the same house!")
+                elif len(houses) == 1 and list(houses)[0] != house:
+                    st.warning(f"Team house ({house}) doesn't match member houses ({list(houses)[0]})")
         
         submitted = st.form_submit_button("🏃‍♂️ Register Relay Team", type="primary")
         
@@ -92,34 +121,42 @@ def show_relay_team_registration(db: DatabaseManager):
             if not team_name.strip():
                 errors.append("Please enter a team name")
             
-            member_ids = [member1_id, member2_id, member3_id, member4_id]
+            member_bibs = [member1_bib, member2_bib, member3_bib, member4_bib]
             
-            # Validate all member IDs
-            for i, member_id in enumerate(member_ids, 1):
-                if not member_id.strip():
-                    errors.append(f"Please enter Curtin ID for Member {i}")
+            # Validate all member Bib IDs
+            valid_bib_ids = []
+            for i, bib in enumerate(member_bibs, 1):
+                if not bib.strip():
+                    errors.append(f"Please enter Bib ID for Member {i}")
+                elif not validate_bib_id(bib):
+                    errors.append(f"Invalid Bib ID format for Member {i}")
                 else:
                     # Check if student exists
-                    student = db.get_student_by_bib(None)  # We need a method to get by curtin_id
-                    # For now, assume all IDs are valid
+                    student = db.get_student_by_bib(int(bib))
+                    if not student:
+                        errors.append(f"No student found with Bib ID {bib}")
+                    elif student['house'] != house:
+                        errors.append(f"Member {i} ({student['first_name']} {student['last_name']}) is not in {house} House")
+                    else:
+                        valid_bib_ids.append(int(bib))
             
             # Check for duplicate members
-            if len(set(member_ids)) != 4:
+            if len(set(valid_bib_ids)) != 4:
                 errors.append("All team members must be different students")
             
             if errors:
                 for error in errors:
                     display_error_message(error)
             else:
-                # Register the team
+                # Register the team with bib IDs
                 success = db.add_relay_team(
                     team_name=team_name.strip(),
                     house=house,
                     event_id=event['event_id'],
-                    member1_id=member1_id.strip(),
-                    member2_id=member2_id.strip(),
-                    member3_id=member3_id.strip(),
-                    member4_id=member4_id.strip()
+                    member1_bib=int(member1_bib),
+                    member2_bib=int(member2_bib),
+                    member3_bib=int(member3_bib),
+                    member4_bib=int(member4_bib)
                 )
                 
                 if success:
@@ -164,17 +201,32 @@ def show_relay_result_entry(db: DatabaseManager):
             with st.form("relay_result_entry"):
                 st.markdown(f"### Recording result for: **{selected_team.get('team_name', 'Unknown')}**")
                 
-                # Show team members
+                # Show team members with their details
                 col1, col2 = st.columns(2)
                 
                 with col1:
                     st.markdown("**Team Members:**")
-                    st.write(f"1. {selected_team.get('member1_name', 'Unknown')}")
-                    st.write(f"2. {selected_team.get('member2_name', 'Unknown')}")
+                    # Try to get member details by bib ID
+                    for i in range(1, 5):
+                        bib_key = f'member{i}_bib_id'
+                        name_key = f'member{i}_name'
+                        
+                        if bib_key in selected_team and selected_team[bib_key]:
+                            member_bib = selected_team[bib_key]
+                            member_name = selected_team.get(name_key, 'Loading...')
+                            
+                            # Get additional member info
+                            member_info = db.get_student_by_bib(member_bib)
+                            if member_info:
+                                gender_icon = {"Male": "👨", "Female": "👩", "Other": "🧑"}.get(member_info.get('gender'), "🧑")
+                                st.write(f"{i}. {member_name} (Bib #{member_bib}) {gender_icon}")
+                        else:
+                            st.write(f"{i}. Member info loading...")
                 
                 with col2:
-                    st.write(f"3. {selected_team.get('member3_name', 'Unknown')}")
-                    st.write(f"4. {selected_team.get('member4_name', 'Unknown')}")
+                    st.markdown("**House & Event:**")
+                    st.write(f"House: {selected_team.get('house', 'Unknown')}")
+                    st.write(f"Event: {selected_event['event_name']}")
                 
                 # Time input
                 time_input = st.text_input(
@@ -232,13 +284,30 @@ def show_relay_team_results(db: DatabaseManager):
         results_data = []
         for team in teams:
             if team.get('result_value'):  # Only show teams with results
+                # Build member list
+                member_names = []
+                for i in range(1, 5):
+                    name_key = f'member{i}_name'
+                    bib_key = f'member{i}_bib_id'
+                    
+                    if name_key in team:
+                        member_name = team[name_key]
+                    elif bib_key in team and team[bib_key]:
+                        # Fallback: get name from bib ID
+                        member_info = db.get_student_by_bib(team[bib_key])
+                        member_name = f"{member_info['first_name']} {member_info['last_name']}" if member_info else f"Bib #{team[bib_key]}"
+                    else:
+                        member_name = "Unknown"
+                    
+                    member_names.append(member_name)
+                
                 results_data.append({
                     "Position": team.get('position', 'N/A'),
                     "Team Name": team.get('team_name', 'Unknown'),
                     "House": team.get('house', 'Unknown'),
                     "Time": f"{team.get('result_value', 0):.2f}s",
                     "Points": team.get('points', 0),
-                    "Members": f"{team.get('member1_name', '')} | {team.get('member2_name', '')} | {team.get('member3_name', '')} | {team.get('member4_name', '')}"
+                    "Members": " | ".join(member_names)
                 })
         
         if results_data:
@@ -329,6 +398,29 @@ def show_relay_standings(db: DatabaseManager):
         # Show leading house
         leader = standings_data[0]
         st.success(f"🏆 {leader['House']} House leads relay events with {leader['Relay Points']} points!")
+        
+        # Show event breakdown
+        st.subheader("Event Breakdown")
+        for event in relay_events:
+            with st.expander(f"📊 {event['event_name']} Results"):
+                teams = db.get_relay_teams_by_event(event['event_id'])
+                if teams and any(t.get('result_value') for t in teams):
+                    event_results = []
+                    for team in teams:
+                        if team.get('result_value'):
+                            event_results.append({
+                                "Position": team.get('position', 'N/A'),
+                                "Team": team.get('team_name', 'Unknown'),
+                                "House": team.get('house', 'Unknown'),
+                                "Time": f"{team.get('result_value', 0):.2f}s",
+                                "Points": team.get('points', 0)
+                            })
+                    
+                    if event_results:
+                        event_df = pd.DataFrame(event_results)
+                        st.dataframe(event_df, hide_index=True, use_container_width=True)
+                else:
+                    st.info("No results recorded for this event yet.")
     
     else:
         display_warning_message("No relay results recorded yet.")

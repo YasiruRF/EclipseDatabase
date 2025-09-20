@@ -17,7 +17,7 @@ def load_events_from_json():
 EVENTS = load_events_from_json()
 
 def show_event_entry():
-    """Display enhanced event entry interface"""
+    """Display enhanced event entry interface with gender-specific point tracking"""
     st.header("🏃‍♂️ Event Entry & Results")
     
     # Initialize database manager
@@ -53,13 +53,31 @@ def show_result_entry_form(db: DatabaseManager):
     if 'student_info' in st.session_state and st.session_state.student_info:
         student_info = st.session_state.student_info
         st.success("✅ Student Found!")
-        st.info(f"**Name:** {student_info.get('first_name', '')} {student_info.get('last_name', '')}")
+        
+        # Display student info with gender
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.info(f"**Name:** {student_info.get('first_name', '')} {student_info.get('last_name', '')}")
+        with col2:
+            st.info(f"**House:** {student_info.get('house', 'Unknown')}")
+        with col3:
+            gender_emoji = {"Male": "👨", "Female": "👩", "Other": "🧑"}
+            gender_icon = gender_emoji.get(student_info.get('gender', 'Other'), "🧑")
+            st.info(f"**Gender:** {gender_icon} {student_info.get('gender', 'Not specified')}")
+            
         if st.button("Clear Student"):
             del st.session_state.student_info
             st.rerun()
 
         st.markdown("---")
         st.markdown("### 🎯 Event Selection & Result Entry")
+
+        # Show gender-specific point allocation info
+        st.markdown("""
+        **Gender-Specific Points:**
+        - **Individual Events:** Male & Female compete separately with same point structure (1st=10pts, 2nd=6pts, 3rd=3pts, 4th=1pt)
+        - **Relay Events:** Teams compete together regardless of gender (1st=15pts, 2nd=9pts, 3rd=5pts, 4th=3pts)
+        """)
 
         event_options = [event['name'] for event_type in EVENTS.values() for event in event_type]
         selected_event_name = st.selectbox("Select Event", event_options)
@@ -81,6 +99,10 @@ def show_result_entry_form(db: DatabaseManager):
             if event_details:
                 st.write(f"**Event:** {event_details['name']}")
                 st.write(f"**Unit:** {event_details['unit']}")
+                
+                # Show gender-specific competition info
+                if not event_details.get('is_relay', False):
+                    st.info(f"**Competition Category:** {student_info.get('gender', 'Unknown')} - competing against other {student_info.get('gender', 'Unknown').lower()} athletes")
 
                 with st.form("result_entry_form"):
                     if event_details['unit'] == 'time':
@@ -101,7 +123,7 @@ def show_result_entry_form(db: DatabaseManager):
 
                     submitted = st.form_submit_button("🏆 Submit Result")
                     if st.form_submit_button("🗑️ Delete Last Result"):
-                        success = db.delete_last_result(student_info["curtin_id"])
+                        success = db.delete_last_result(student_info["bib_id"])  # Updated to use bib_id
                         if success:
                             display_success_message("Last result deleted successfully!")
 
@@ -122,15 +144,15 @@ def show_result_entry_form(db: DatabaseManager):
                             display_error_message("Event not found in database.")
                             return
 
+                        # Updated to use bib_id instead of curtin_id
                         success = db.add_result(
-                            curtin_id=student_info["curtin_id"],
+                            bib_id=student_info["bib_id"],
                             event_id=event_from_db['event_id'],
-                            result_value=processed_result,
-                            house=student_info['house']
+                            result_value=processed_result
                         )
 
                         if success:
-                            display_success_message("Result recorded successfully!")
+                            display_success_message(f"Result recorded successfully for {student_info.get('gender')} competition!")
                             if 'selected_event_name' in st.session_state:
                                 del st.session_state.selected_event_name
                             st.rerun()
