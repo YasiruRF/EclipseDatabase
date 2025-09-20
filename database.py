@@ -175,6 +175,19 @@ class DatabaseManager:
             self._handle_database_error("add_event", e)
             return False
 
+    def get_event_by_name(self, event_name: str) -> Optional[Dict]:
+        """Get event details by event name"""
+        try:
+            result = self.supabase.table("events").select("*").eq("event_name", event_name).execute()
+            
+            if result.data:
+                return result.data[0]
+            return None
+            
+        except Exception as e:
+            self._handle_database_error("get_event_by_name", e)
+            return None
+
     def get_events_by_type(self, event_type: str) -> List[Dict]:
         """Get all events of a specific type"""
         try:
@@ -195,7 +208,7 @@ class DatabaseManager:
             self._handle_database_error("get_all_events", e)
             return []
 
-    def add_result(self, curtin_id: str, event_id: int, result_value: float) -> bool:
+    def add_result(self, curtin_id: str, event_id: int, result_value: float, house: str) -> bool:
         """Add a result and calculate points"""
         try:
             # First check if result already exists
@@ -210,6 +223,7 @@ class DatabaseManager:
                 "curtin_id": curtin_id,
                 "event_id": event_id,
                 "result_value": float(result_value),
+                "house": house,
                 "points": 0,
                 "position": 999
             }).execute()
@@ -456,20 +470,20 @@ class DatabaseManager:
             self._handle_database_error("get_all_results", e)
             return []
 
-    def get_results_by_house(self, house: str) -> List[Dict]:
-        """Get all results for a specific house"""
+    def delete_event(self, event_id: int) -> bool:
+        """Delete an event from the database"""
         try:
-            result = self.supabase.table("results").select("""
-                *, 
-                students!inner(curtin_id, bib_id, first_name, last_name, house, gender),
-                events!inner(event_name, event_type, unit, is_relay, point_system_name)
-            """).eq("students.house", house).execute()
+            result = self.supabase.table("events").delete().eq("event_id", event_id).execute()
             
-            return result.data or []
-            
+            if result:
+                logger.info(f"Event {event_id} deleted successfully")
+                return True
+            else:
+                return False
+                
         except Exception as e:
-            self._handle_database_error("get_results_by_house", e)
-            return []
+            self._handle_database_error("delete_event", e)
+            return False
             
     def delete_result(self, result_id: int) -> bool:
         """Delete a result and recalculate positions"""

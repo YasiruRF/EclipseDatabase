@@ -1,34 +1,39 @@
--- Sports Meet Event Management System Database Setup
+-- Enhanced Sports Meet Event Management System Database Setup
 -- Run this SQL script in your Supabase SQL Editor
 
--- Enable Row Level Security (optional but recommended)
--- You can adjust these policies based on your security requirements
+-- Students table with gender field added
+DROP TABLE IF EXISTS results CASCADE;
+DROP TABLE IF EXISTS events CASCADE;
+DROP TABLE IF EXISTS students CASCADE;
 
--- Students table
-CREATE TABLE IF NOT EXISTS students (
+CREATE TABLE students (
     curtin_id VARCHAR PRIMARY KEY,
     bib_id INTEGER UNIQUE NOT NULL CHECK (bib_id > 0),
     first_name VARCHAR NOT NULL CHECK (length(first_name) > 0),
     last_name VARCHAR NOT NULL CHECK (length(last_name) > 0),
     house VARCHAR NOT NULL CHECK (house IN ('Ignis', 'Nereus', 'Ventus', 'Terra')),
+    gender VARCHAR NOT NULL CHECK (gender IN ('Male', 'Female', 'Other')),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- Events table
-CREATE TABLE IF NOT EXISTS events (
+-- Enhanced events table with better point allocation support
+CREATE TABLE events (
     event_id SERIAL PRIMARY KEY,
     event_name VARCHAR NOT NULL CHECK (length(event_name) > 0),
-    event_type VARCHAR NOT NULL CHECK (event_type IN ('Running', 'Throwing', 'Jumping')),
+    event_type VARCHAR NOT NULL CHECK (event_type IN ('Track', 'Field')),
     unit VARCHAR NOT NULL,
-    point_allocation JSONB DEFAULT '{}',
+    is_relay BOOLEAN DEFAULT FALSE,
+    point_allocation JSONB NOT NULL DEFAULT '{"1": 10, "2": 8, "3": 6, "4": 5, "5": 4, "6": 3, "7": 2, "8": 1}',
+    point_system_name VARCHAR DEFAULT 'Individual Events',
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- Results table
-CREATE TABLE IF NOT EXISTS results (
+-- Results table (unchanged but with cascade dependencies)
+CREATE TABLE results (
     result_id SERIAL PRIMARY KEY,
     curtin_id VARCHAR REFERENCES students(curtin_id) ON DELETE CASCADE,
     event_id INTEGER REFERENCES events(event_id) ON DELETE CASCADE,
+    house VARCHAR NOT NULL,
     result_value DECIMAL NOT NULL CHECK (result_value > 0),
     points INTEGER DEFAULT 0 CHECK (points >= 0),
     position INTEGER CHECK (position > 0),
@@ -37,123 +42,63 @@ CREATE TABLE IF NOT EXISTS results (
 );
 
 -- Indexes for better performance
-CREATE INDEX IF NOT EXISTS idx_students_bib_id ON students(bib_id);
-CREATE INDEX IF NOT EXISTS idx_students_house ON students(house);
-CREATE INDEX IF NOT EXISTS idx_events_type ON events(event_type);
-CREATE INDEX IF NOT EXISTS idx_results_event_id ON results(event_id);
-CREATE INDEX IF NOT EXISTS idx_results_position ON results(position);
+CREATE INDEX idx_students_bib_id ON students(bib_id);
+CREATE INDEX idx_students_house ON students(house);
+CREATE INDEX idx_students_gender ON students(gender);
+CREATE INDEX idx_events_type ON events(event_type);
+CREATE INDEX idx_events_relay ON events(is_relay);
+CREATE INDEX idx_results_event_id ON results(event_id);
+CREATE INDEX idx_results_position ON results(position);
+CREATE INDEX idx_results_points ON results(points);
 
--- Insert some default events (optional - you can also add these through the UI)
-INSERT INTO events (event_name, event_type, unit, point_allocation) VALUES 
-    ('100m Sprint', 'Running', 'seconds', '{"1": 10, "2": 8, "3": 6, "4": 5, "5": 4, "6": 3, "7": 2, "8": 1}'),
-    ('200m Sprint', 'Running', 'seconds', '{"1": 10, "2": 8, "3": 6, "4": 5, "5": 4, "6": 3, "7": 2, "8": 1}'),
-    ('Long Jump', 'Jumping', 'meters', '{"1": 10, "2": 8, "3": 6, "4": 5, "5": 4, "6": 3, "7": 2, "8": 1}'),
-    ('High Jump', 'Jumping', 'meters', '{"1": 10, "2": 8, "3": 6, "4": 5, "5": 4, "6": 3, "7": 2, "8": 1}'),
-    ('Shot Put', 'Throwing', 'meters', '{"1": 10, "2": 8, "3": 6, "4": 5, "5": 4, "6": 3, "7": 2, "8": 1}'),
-    ('Javelin', 'Throwing', 'meters', '{"1": 10, "2": 8, "3": 6, "4": 5, "5": 4, "6": 3, "7": 2, "8": 1}')
+-- Insert enhanced default events with proper point allocations
+INSERT INTO events (event_name, event_type, unit, is_relay, point_allocation, point_system_name) VALUES 
+    ('100m Sprint', 'Track', 'time', FALSE, '{"1": 10, "2": 8, "3": 6, "4": 5, "5": 4, "6": 3, "7": 2, "8": 1}', 'Individual Events'),
+    ('200m Sprint', 'Track', 'time', FALSE, '{"1": 10, "2": 8, "3": 6, "4": 5, "5": 4, "6": 3, "7": 2, "8": 1}', 'Individual Events'),
+    ('400m Sprint', 'Track', 'time', FALSE, '{"1": 10, "2": 8, "3": 6, "4": 5, "5": 4, "6": 3, "7": 2, "8": 1}', 'Individual Events'),
+    ('800m Run', 'Track', 'time', FALSE, '{"1": 10, "2": 8, "3": 6, "4": 5, "5": 4, "6": 3, "7": 2, "8": 1}', 'Individual Events'),
+    ('1500m Run', 'Track', 'time', FALSE, '{"1": 10, "2": 8, "3": 6, "4": 5, "5": 4, "6": 3, "7": 2, "8": 1}', 'Individual Events'),
+    ('4x100m Relay', 'Track', 'time', TRUE, '{"1": 20, "2": 16, "3": 12, "4": 10, "5": 8, "6": 6, "7": 4, "8": 2}', 'Relay Events'),
+    ('4x400m Relay', 'Track', 'time', TRUE, '{"1": 20, "2": 16, "3": 12, "4": 10, "5": 8, "6": 6, "7": 4, "8": 2}', 'Relay Events'),
+    ('Long Jump', 'Field', 'meters', FALSE, '{"1": 10, "2": 8, "3": 6, "4": 5, "5": 4, "6": 3, "7": 2, "8": 1}', 'Individual Events'),
+    ('High Jump', 'Field', 'meters', FALSE, '{"1": 10, "2": 8, "3": 6, "4": 5, "5": 4, "6": 3, "7": 2, "8": 1}', 'Individual Events'),
+    ('Triple Jump', 'Field', 'meters', FALSE, '{"1": 10, "2": 8, "3": 6, "4": 5, "5": 4, "6": 3, "7": 2, "8": 1}', 'Individual Events'),
+    ('Shot Put', 'Field', 'meters', FALSE, '{"1": 10, "2": 8, "3": 6, "4": 5, "5": 4, "6": 3, "7": 2, "8": 1}', 'Individual Events'),
+    ('Discus Throw', 'Field', 'meters', FALSE, '{"1": 10, "2": 8, "3": 6, "4": 5, "5": 4, "6": 3, "7": 2, "8": 1}', 'Individual Events'),
+    ('Javelin Throw', 'Field', 'meters', FALSE, '{"1": 10, "2": 8, "3": 6, "4": 5, "5": 4, "6": 3, "7": 2, "8": 1}', 'Individual Events');
+
+-- Sample students with gender for testing
+INSERT INTO students (curtin_id, bib_id, first_name, last_name, house, gender) VALUES 
+    ('12345678', 101, 'John', 'Smith', 'Ignis', 'Male'),
+    ('12345679', 102, 'Jane', 'Doe', 'Nereus', 'Female'),
+    ('12345680', 103, 'Mike', 'Johnson', 'Terra', 'Male'),
+    ('12345681', 104, 'Sarah', 'Wilson', 'Ventus', 'Female'),
+    ('12345682', 105, 'Alex', 'Brown', 'Ignis', 'Male'),
+    ('12345683', 106, 'Emily', 'Davis', 'Nereus', 'Female')
 ON CONFLICT DO NOTHING;
 
--- Sample students for testing (optional - remove if you don't want test data)
-INSERT INTO students (curtin_id, bib_id, first_name, last_name, house) VALUES 
-    ('12345678', 101, 'John', 'Smith', 'Ignis'),
-    ('12345679', 102, 'Jane', 'Doe', 'Nereus'),
-    ('12345680', 103, 'Mike', 'Johnson', 'Terra'),
-    ('12345681', 104, 'Sarah', 'Wilson', 'Ventus'),
-    ('12345682', 105, 'Alex', 'Brown', 'Ignis'),
-    ('12345683', 106, 'Emily', 'Davis', 'Nereus')
-ON CONFLICT DO NOTHING;
+-- Enhanced views for better data analysis
 
--- Views for easier querying (optional but helpful)
-
--- View for results with student and event details
-CREATE OR REPLACE VIEW results_detailed AS
+-- View for individual athlete performance (for finding best male/female athletes)
+CREATE OR REPLACE VIEW individual_athlete_performance AS
 SELECT 
-    r.result_id,
-    r.result_value,
-    r.points,
-    r.position,
-    r.created_at as result_date,
     s.curtin_id,
     s.bib_id,
     s.first_name,
     s.last_name,
     s.house,
-    e.event_id,
-    e.event_name,
-    e.event_type,
-    e.unit
-FROM results r
-JOIN students s ON r.curtin_id = s.curtin_id
-JOIN events e ON r.event_id = e.event_id
-ORDER BY e.event_name, r.position;
-
--- View for house points summary
-CREATE OR REPLACE VIEW house_points_summary AS
-SELECT 
-    s.house,
-    COUNT(r.result_id) as total_participations,
+    s.gender,
+    COUNT(r.result_id) as total_events,
     SUM(r.points) as total_points,
     AVG(r.points) as average_points,
-    COUNT(CASE WHEN r.position = 1 THEN 1 END) as first_places,
-    COUNT(CASE WHEN r.position = 2 THEN 1 END) as second_places,
-    COUNT(CASE WHEN r.position = 3 THEN 1 END) as third_places,
-    COUNT(CASE WHEN r.position <= 3 THEN 1 END) as podium_finishes
+    COUNT(CASE WHEN r.position = 1 THEN 1 END) as gold_medals,
+    COUNT(CASE WHEN r.position = 2 THEN 1 END) as silver_medals,
+    COUNT(CASE WHEN r.position = 3 THEN 1 END) as bronze_medals,
+    COUNT(CASE WHEN r.position <= 3 THEN 1 END) as total_medals,
+    RANK() OVER (ORDER BY SUM(r.points) DESC, COUNT(CASE WHEN r.position = 1 THEN 1 END) DESC) as overall_rank,
+    RANK() OVER (PARTITION BY s.gender ORDER BY SUM(r.points) DESC, COUNT(CASE WHEN r.position = 1 THEN 1 END) DESC) as gender_rank
 FROM students s
 LEFT JOIN results r ON s.curtin_id = r.curtin_id
-GROUP BY s.house
+GROUP BY s.curtin_id, s.bib_id, s.first_name, s.last_name, s.house, s.gender
+HAVING COUNT(r.result_id) > 0
 ORDER BY total_points DESC NULLS LAST;
-
--- Function to automatically recalculate positions and points when results change
-CREATE OR REPLACE FUNCTION recalculate_event_positions(event_id_param INTEGER)
-RETURNS VOID AS $$
-DECLARE
-    event_rec RECORD;
-    result_rec RECORD;
-    pos INTEGER := 1;
-    points_allocation JSONB;
-BEGIN
-    -- Get event details
-    SELECT event_type, point_allocation INTO event_rec FROM events WHERE event_id = event_id_param;
-    
-    -- Get point allocation, use default if not set
-    points_allocation := COALESCE(event_rec.point_allocation, '{"1": 10, "2": 8, "3": 6, "4": 5, "5": 4, "6": 3, "7": 2, "8": 1}');
-    
-    -- Update positions and points based on event type
-    FOR result_rec IN 
-        SELECT result_id, result_value 
-        FROM results 
-        WHERE event_id = event_id_param 
-        ORDER BY 
-            CASE 
-                WHEN event_rec.event_type = 'Running' THEN result_value 
-                ELSE -result_value 
-            END
-    LOOP
-        -- Update position and points
-        UPDATE results 
-        SET 
-            position = pos,
-            points = COALESCE((points_allocation->>pos::text)::INTEGER, 0)
-        WHERE result_id = result_rec.result_id;
-        
-        pos := pos + 1;
-    END LOOP;
-END;
-$$ LANGUAGE plpgsql;
-
--- Trigger to automatically recalculate positions when results are added/updated
-CREATE OR REPLACE FUNCTION trigger_recalculate_positions()
-RETURNS TRIGGER AS $$
-BEGIN
-    -- Recalculate for the affected event
-    PERFORM recalculate_event_positions(COALESCE(NEW.event_id, OLD.event_id));
-    RETURN COALESCE(NEW, OLD);
-END;
-$$ LANGUAGE plpgsql;
-
--- Create triggers
-DROP TRIGGER IF EXISTS results_change_trigger ON results;
-CREATE TRIGGER results_change_trigger
-    AFTER INSERT OR UPDATE OR DELETE ON results
-    FOR EACH ROW
-    EXECUTE FUNCTION trigger_recalculate_positions();

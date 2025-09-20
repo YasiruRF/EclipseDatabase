@@ -1,10 +1,6 @@
 """Configuration settings for the Sports Meet Management System - Enhanced Version"""
 
-# Event types and their corresponding data entry fields
-EVENT_TYPES = {
-    "Track": "time",      # Changed from "Running" to "Track" for clarity
-    "Field": "distance"   # Combined "Throwing" and "Jumping" into "Field"
-}
+
 
 # Track events (use time in MM:SS.ms format)
 TRACK_EVENTS = [
@@ -36,7 +32,6 @@ DEFAULT_RELAY_POINTS = {
 POINT_SYSTEM_TEMPLATES = {
     "Individual Events": DEFAULT_INDIVIDUAL_POINTS,
     "Relay Events": DEFAULT_RELAY_POINTS,
-    "Championship Events": {1: 15, 2: 12, 3: 9, 4: 7, 5: 5, 6: 3, 7: 2, 8: 1},
     "Custom": {}
 }
 
@@ -51,26 +46,7 @@ HOUSE_COLORS = {
     "Terra": "#95e1d3"     # Green
 }
 
-# Event categories with sample events
-EVENTS = {
-    "Track": [
-        {"name": "100m Sprint", "unit": "time", "is_relay": False},
-        {"name": "200m Sprint", "unit": "time", "is_relay": False},
-        {"name": "400m Sprint", "unit": "time", "is_relay": False},
-        {"name": "800m Run", "unit": "time", "is_relay": False},
-        {"name": "1500m Run", "unit": "time", "is_relay": False},
-        {"name": "4x100m Relay", "unit": "time", "is_relay": True},
-        {"name": "4x400m Relay", "unit": "time", "is_relay": True}
-    ],
-    "Field": [
-        {"name": "Long Jump", "unit": "meters", "is_relay": False},
-        {"name": "High Jump", "unit": "meters", "is_relay": False},
-        {"name": "Triple Jump", "unit": "meters", "is_relay": False},
-        {"name": "Shot Put", "unit": "meters", "is_relay": False},
-        {"name": "Discus Throw", "unit": "meters", "is_relay": False},
-        {"name": "Javelin Throw", "unit": "meters", "is_relay": False}
-    ]
-}
+
 
 # Streamlit page configuration
 PAGE_CONFIG = {

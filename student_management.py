@@ -304,6 +304,39 @@ def show_all_students(db: DatabaseManager):
             with [col1, col2, col3][i]:
                 st.metric(f"{emoji} {gender}", count)
 
+
+
+def filter_students(students, search_term="", house_filter="All", gender_filter="All"):
+    """Filter students based on search criteria including gender"""
+    filtered = students
+    
+    # Apply search term filter
+    if search_term:
+        search_term = search_term.lower()
+        filtered = [
+            student for student in filtered
+            if (search_term in student["first_name"].lower() or
+                search_term in student["last_name"].lower() or
+                search_term in student["curtin_id"].lower() or
+                search_term in str(student["bib_id"]))
+        ]
+    
+    # Apply house filter
+    if house_filter != "All":
+        filtered = [
+            student for student in filtered
+            if student["house"] == house_filter
+        ]
+    
+    # Apply gender filter
+    if gender_filter != "All":
+        filtered = [
+            student for student in filtered
+            if student.get("gender", "Not specified") == gender_filter
+        ]
+    
+    return filtered
+
 def show_top_athletes(db: DatabaseManager):
     """Display top individual athletes"""
     st.subheader("🏆 Top Individual Athletes")
@@ -399,34 +432,3 @@ def display_athlete_ranking(athletes: List[Dict], title: str, limit: int = 10):
                 file_name=f"{title.replace(' ', '_').lower()}.csv",
                 mime="text/csv"
             )
-
-def filter_students(students, search_term="", house_filter="All", gender_filter="All"):
-    """Filter students based on search criteria including gender"""
-    filtered = students
-    
-    # Apply search term filter
-    if search_term:
-        search_term = search_term.lower()
-        filtered = [
-            student for student in filtered
-            if (search_term in student["first_name"].lower() or
-                search_term in student["last_name"].lower() or
-                search_term in student["curtin_id"].lower() or
-                search_term in str(student["bib_id"]))
-        ]
-    
-    # Apply house filter
-    if house_filter != "All":
-        filtered = [
-            student for student in filtered
-            if student["house"] == house_filter
-        ]
-    
-    # Apply gender filter
-    if gender_filter != "All":
-        filtered = [
-            student for student in filtered
-            if student.get("gender", "Not specified") == gender_filter
-        ]
-    
-    return filtered

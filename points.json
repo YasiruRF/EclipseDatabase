@@ -1,0 +1,19 @@
+{
+    "Track": [
+        {"name": "100m Sprint", "unit": "time", "is_relay": false},
+        {"name": "200m Sprint", "unit": "time", "is_relay": false},
+        {"name": "400m Sprint", "unit": "time", "is_relay": false},
+        {"name": "800m Run", "unit": "time", "is_relay": false},
+        {"name": "1500m Run", "unit": "time", "is_relay": false},
+        {"name": "4x100m Relay", "unit": "time", "is_relay": true},
+        {"name": "4x400m Relay", "unit": "time", "is_relay": true}
+    ],
+    "Field": [
+        {"name": "Long Jump", "unit": "meters", "is_relay": false},
+        {"name": "High Jump", "unit": "meters", "is_relay": false},
+        {"name": "Triple Jump", "unit": "meters", "is_relay": false},
+        {"name": "Shot Put", "unit": "meters", "is_relay": false},
+        {"name": "Discus Throw", "unit": "meters", "is_relay": false},
+        {"name": "Javelin Throw", "unit": "meters", "is_relay": false}
+    ]
+}
