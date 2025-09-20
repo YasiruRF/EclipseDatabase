@@ -295,6 +295,18 @@ class DatabaseManager:
             self._handle_database_error("get_results_by_event", e)
             return []
 
+    def get_all_results(self) -> List[Dict]:
+        try:
+            result = self.supabase.table("results").select("""
+                *,
+                students!inner(curtin_id, bib_id, first_name, last_name, house, gender),
+                events!inner(event_name, event_type, unit, is_relay, point_system_name)
+            """).order("result_id").execute()
+            return result.data or []
+        except Exception as e:
+            self._handle_database_error("get_all_results", e)
+            return []
+
     # ------------------- Relay Team Operations -------------------
     def add_relay_team(self, team_name: str, house: str, event_id: int, 
                        member1_id: str, member2_id: str, member3_id: str, member4_id: str) -> bool:
