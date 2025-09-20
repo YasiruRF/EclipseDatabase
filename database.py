@@ -1,4 +1,4 @@
-"""Enhanced Database operations with improved point allocation and athlete tracking"""
+"""Enhanced Database operations with corrected point allocation and relay team support"""
 
 import os
 from typing import List, Dict, Optional
@@ -30,26 +30,39 @@ class DatabaseManager:
         if not SUPABASE_AVAILABLE:
             raise ImportError("Supabase client not available. Install with: pip install supabase")
             
+        # Manual fallback - recalculate all individual events
         try:
-            # Get credentials from environment variables or Streamlit secrets
-            url = self._get_credential("SUPABASE_URL")
-            key = self._get_credential("SUPABASE_KEY")
+            all_events = self.get_all_events()
+            events_processed = 0
             
-            if not url or not key:
-                raise ValueError("Supabase credentials not found. Please set SUPABASE_URL and SUPABASE_KEY")
+            for event in all_events:
+                if not event.get('is_relay', False):  # Only individual events
+                    self._calculate_positions_and_points(event['event_id'])
+                    events_processed += 1
+                else:  # Relay events
+                    self._calculate_relay_positions_and_points(event['event_id'])
+                    events_processed += 1
             
-            # Create Supabase client
-            self.supabase: Client = create_client(url, key)
-            
-            # Test connection
-            if not self._test_connection():
-                raise ConnectionError("Failed to establish database connection")
-            
-            logger.info("Database connection established successfully")
+            logger.info(f"Manual recalculation completed for {events_processed} events")
+            return True
             
         except Exception as e:
-            logger.error(f"Failed to initialize database: {str(e)}")
-            raise
+            self._handle_database_error("recalculate_all_points_manual", e)
+            return False  # Get credentials from environment variables or Streamlit secrets
+        url = self._get_credential("SUPABASE_URL")
+        key = self._get_credential("SUPABASE_KEY")
+        
+        if not url or not key:
+            raise ValueError("Supabase credentials not found. Please set SUPABASE_URL and SUPABASE_KEY")
+        
+        # Create Supabase client
+        self.supabase: Client = create_client(url, key)
+        
+        # Test connection
+        if not self._test_connection():
+            raise ConnectionError("Failed to establish database connection")
+        
+        logger.info("Database connection established successfully")
 
     def _get_credential(self, key: str) -> str:
         """Get credential from environment or Streamlit secrets"""
@@ -156,17 +169,21 @@ class DatabaseManager:
     def add_event(self, event_name: str, event_type: str, unit: str, 
                  is_relay: bool = False, point_allocation: Dict = None, 
                  point_system_name: str = "Individual Events") -> bool:
-        """Add a new event to the database with enhanced point allocation"""
+        """Add a new event to the database with corrected point allocation"""
         try:
-            # Convert point_allocation keys to strings for JSON compatibility
-            if point_allocation:
-                point_allocation = {str(k): v for k, v in point_allocation.items()}
-            
-            # Default point allocation if none provided
+            # Use corrected default point allocations
             if not point_allocation:
-                from config import DEFAULT_INDIVIDUAL_POINTS, DEFAULT_RELAY_POINTS
-                point_allocation = DEFAULT_RELAY_POINTS if is_relay else DEFAULT_INDIVIDUAL_POINTS
-                point_allocation = {str(k): v for k, v in point_allocation.items()}
+                if is_relay:
+                    # Relay Events: 1st=15, 2nd=9, 3rd=5, 4th=3
+                    point_allocation = {"1": 15, "2": 9, "3": 5, "4": 3}
+                    point_system_name = "Relay Events"
+                else:
+                    # Individual Events: 1st=10, 2nd=6, 3rd=3, 4th=1
+                    point_allocation = {"1": 10, "2": 6, "3": 3, "4": 1}
+                    point_system_name = "Individual Events"
+            
+            # Convert point_allocation keys to strings for JSON compatibility
+            point_allocation = {str(k): v for k, v in point_allocation.items()}
             
             result = self.supabase.table("events").insert({
                 "event_name": event_name,
@@ -334,7 +351,7 @@ class DatabaseManager:
                 all_results.extend(event_results)
             
             # Sort by event name, then by position
-            all_results.sort(key=lambda x: (x["events"]["event_name"], x.get("position", 999)))
+            all_results.sort(key=lambda x: (x.get("events", {}).get("event_name", ""), x.get("position", 999)))
             
             return all_results
             
@@ -343,27 +360,88 @@ class DatabaseManager:
             return []
 
     def get_house_points(self) -> List[Dict]:
-        """Get total points by house"""
+        """Get total points by house using corrected view with fallback"""
         try:
-            # Get all results with student house information
-            results = self.supabase.table("results").select("""
+            # First try the corrected house points view
+            result = self.supabase.table("corrected_house_points").select("*").order("total_points", desc=True).execute()
+            
+            if result.data:
+                # Convert to expected format
+                house_list = []
+                for row in result.data:
+                    house_list.append({
+                        "house": row["house"],
+                        "total_points": row["total_points"],
+                        "individual_points": row.get("individual_points", 0),
+                        "relay_team_points": row.get("relay_team_points", 0)
+                    })
+                return house_list
+                
+        except Exception as e:
+            logger.warning(f"Corrected house points view not available: {e}")
+        
+        # Fallback to manual calculation
+        try:
+            # Get individual event points
+            individual_results = self.supabase.table("results").select("""
                 points,
-                students!inner(house)
+                students!inner(house),
+                events!inner(is_relay)
             """).execute()
             
-            if not results.data:
-                return []
+            # Get relay team points
+            relay_results = []
+            try:
+                relay_results = self.supabase.table("relay_teams").select("house, points").execute().data or []
+            except:
+                pass
             
-            # Calculate totals by house
             house_totals = {}
-            for result in results.data:
-                house = result["students"]["house"]
-                points = result["points"] or 0
-                house_totals[house] = house_totals.get(house, 0) + points
             
-            # Convert to list format for display, sorted by points
-            house_list = [{"house": house, "total_points": points} 
-                         for house, points in house_totals.items()]
+            # Calculate individual points (exclude relay events)
+            if individual_results.data:
+                for result in individual_results.data:
+                    event_data = result.get("events", {})
+                    if isinstance(event_data, list):
+                        event_data = event_data[0] if event_data else {}
+                    
+                    # Skip relay events for individual calculations
+                    if event_data.get("is_relay", False):
+                        continue
+                    
+                    student_data = result.get("students", {})
+                    if isinstance(student_data, list):
+                        student_data = student_data[0] if student_data else {}
+                    
+                    house = student_data.get("house", "Unknown")
+                    points = result.get("points", 0) or 0
+                    
+                    if house not in house_totals:
+                        house_totals[house] = {"individual_points": 0, "relay_team_points": 0}
+                    house_totals[house]["individual_points"] += points
+            
+            # Add relay team points
+            for relay in relay_results:
+                house = relay.get("house", "Unknown")
+                points = relay.get("points", 0) or 0
+                
+                if house not in house_totals:
+                    house_totals[house] = {"individual_points": 0, "relay_team_points": 0}
+                house_totals[house]["relay_team_points"] += points
+            
+            # Convert to list format
+            house_list = []
+            for house, points_data in house_totals.items():
+                individual_points = points_data["individual_points"]
+                relay_points = points_data["relay_team_points"]
+                total_points = individual_points + relay_points
+                
+                house_list.append({
+                    "house": house,
+                    "total_points": total_points,
+                    "individual_points": individual_points,
+                    "relay_team_points": relay_points
+                })
             
             # Sort by total points descending
             house_list.sort(key=lambda x: x["total_points"], reverse=True)
@@ -371,76 +449,97 @@ class DatabaseManager:
             return house_list
             
         except Exception as e:
-            self._handle_database_error("get_house_points", e)
+            self._handle_database_error("get_house_points_fallback", e)
             return []
 
     def get_individual_athlete_performance(self, limit: int = None) -> List[Dict]:
-        """Get individual athlete performance for finding best athletes"""
+        """Get individual athlete performance with fallback"""
         try:
-            query = self.supabase.table("individual_athlete_performance").select("*")
+            # First try the enhanced athlete performance view
+            query = self.supabase.table("athlete_complete_performance").select("*").order("total_individual_points", desc=True)
             if limit:
                 query = query.limit(limit)
             
             result = query.execute()
-            return result.data or []
+            if result.data:
+                return result.data
+                
+        except Exception as e:
+            logger.warning(f"Athlete performance view not available: {e}")
+        
+        # Fallback to manual calculation
+        try:
+            # Get all results with student information (exclude relay events)
+            results = self.supabase.table("results").select("""
+                *,
+                students!inner(curtin_id, bib_id, first_name, last_name, house, gender),
+                events!inner(is_relay)
+            """).execute()
+            
+            if not results.data:
+                return []
+            
+            # Group by student
+            athlete_performance = {}
+            for result in results.data:
+                # Handle nested data structure
+                event_data = result.get("events", {})
+                if isinstance(event_data, list):
+                    event_data = event_data[0] if event_data else {}
+                
+                # Skip relay events for individual performance
+                if event_data.get("is_relay", False):
+                    continue
+                    
+                student_data = result.get("students", {})
+                if isinstance(student_data, list):
+                    student_data = student_data[0] if student_data else {}
+                
+                key = student_data.get("curtin_id")
+                if not key:
+                    continue
+                
+                if key not in athlete_performance:
+                    athlete_performance[key] = {
+                        "curtin_id": student_data.get("curtin_id"),
+                        "bib_id": student_data.get("bib_id"),
+                        "first_name": student_data.get("first_name"),
+                        "last_name": student_data.get("last_name"),
+                        "house": student_data.get("house"),
+                        "gender": student_data.get("gender"),
+                        "total_events": 0,
+                        "total_points": 0,
+                        "gold_medals": 0,
+                        "silver_medals": 0,
+                        "bronze_medals": 0
+                    }
+                
+                # Add stats
+                athlete_performance[key]["total_events"] += 1
+                athlete_performance[key]["total_points"] += result.get("points", 0) or 0
+                
+                position = result.get("position", 0)
+                if position == 1:
+                    athlete_performance[key]["gold_medals"] += 1
+                elif position == 2:
+                    athlete_performance[key]["silver_medals"] += 1
+                elif position == 3:
+                    athlete_performance[key]["bronze_medals"] += 1
+            
+            # Convert to list and sort
+            performance_list = list(athlete_performance.values())
+            performance_list.sort(key=lambda x: (x["total_points"], x["gold_medals"]), reverse=True)
+            
+            # Add rankings
+            for i, athlete in enumerate(performance_list):
+                athlete["overall_rank"] = i + 1
+                athlete["total_individual_points"] = athlete["total_points"]  # Alias for compatibility
+            
+            return performance_list[:limit] if limit else performance_list
             
         except Exception as e:
-            # Fallback to manual calculation if view doesn't exist
-            try:
-                # Get all results with student information
-                results = self.supabase.table("results").select("""
-                    *,
-                    students!inner(curtin_id, bib_id, first_name, last_name, house, gender)
-                """).execute()
-                
-                if not results.data:
-                    return []
-                
-                # Group by student
-                athlete_performance = {}
-                for result in results.data:
-                    student = result["students"]
-                    key = student["curtin_id"]
-                    
-                    if key not in athlete_performance:
-                        athlete_performance[key] = {
-                            "curtin_id": student["curtin_id"],
-                            "bib_id": student["bib_id"],
-                            "first_name": student["first_name"],
-                            "last_name": student["last_name"],
-                            "house": student["house"],
-                            "gender": student["gender"],
-                            "total_events": 0,
-                            "total_points": 0,
-                            "gold_medals": 0,
-                            "silver_medals": 0,
-                            "bronze_medals": 0
-                        }
-                    
-                    # Add stats
-                    athlete_performance[key]["total_events"] += 1
-                    athlete_performance[key]["total_points"] += result.get("points", 0)
-                    
-                    if result.get("position") == 1:
-                        athlete_performance[key]["gold_medals"] += 1
-                    elif result.get("position") == 2:
-                        athlete_performance[key]["silver_medals"] += 1
-                    elif result.get("position") == 3:
-                        athlete_performance[key]["bronze_medals"] += 1
-                
-                # Convert to list and sort
-                performance_list = list(athlete_performance.values())
-                performance_list.sort(key=lambda x: (x["total_points"], x["gold_medals"]), reverse=True)
-                
-                # Add rankings
-                for i, athlete in enumerate(performance_list):
-                    athlete["overall_rank"] = i + 1
-                
-                return performance_list[:limit] if limit else performance_list
-                
-            except Exception as inner_e:
-                self._handle_database_error("get_individual_athlete_performance_fallback", inner_e)
-                return []
+            self._handle_database_error("get_individual_athlete_performance_fallback", e)
+            return []
 
     def get_best_athletes_by_gender(self) -> Dict[str, Dict]:
         """Get best male and female athletes"""
@@ -450,7 +549,9 @@ class DatabaseManager:
             best_athletes = {}
             for athlete in all_athletes:
                 gender = athlete.get("gender", "Other")
-                if gender not in best_athletes or athlete["total_points"] > best_athletes[gender]["total_points"]:
+                total_points = athlete.get("total_points", 0) or athlete.get("total_individual_points", 0)
+                
+                if gender not in best_athletes or total_points > best_athletes[gender].get("total_points", 0):
                     best_athletes[gender] = athlete
             
             return best_athletes
@@ -501,7 +602,8 @@ class DatabaseManager:
             
             # Sort results by event name, then position
             sorted_results = sorted(result.data, key=lambda x: (
-                x["events"]["event_name"], 
+                x.get("events", {}).get("event_name", "") if isinstance(x.get("events"), dict) 
+                else (x.get("events")[0].get("event_name", "") if x.get("events") else ""), 
                 x.get("position", 999)
             ))
             
@@ -590,8 +692,12 @@ class DatabaseManager:
                 team_data = self.supabase.table("relay_teams").select("event_id").eq("team_id", team_id).execute()
                 if team_data.data:
                     event_id = team_data.data[0]["event_id"]
-                    # Call the database function to calculate relay positions and points
-                    self.supabase.rpc("calculate_relay_team_points", {"event_id_param": event_id}).execute()
+                    # Try to call the database function, fallback to manual calculation
+                    try:
+                        self.supabase.rpc("calculate_relay_team_points", {"event_id_param": event_id}).execute()
+                    except:
+                        # Manual fallback for relay point calculation
+                        self._calculate_relay_positions_and_points(event_id)
                 
                 logger.info(f"Relay team result added successfully for team {team_id}")
                 return True
@@ -603,35 +709,75 @@ class DatabaseManager:
             self._handle_database_error("add_relay_team_result", e)
             return False
 
+    def _calculate_relay_positions_and_points(self, event_id: int):
+        """Manual fallback for calculating relay team positions and points"""
+        try:
+            # Get event details
+            event_result = self.supabase.table("events").select("*").eq("event_id", event_id).execute()
+            if not event_result.data:
+                return
+            
+            event_data = event_result.data[0]
+            point_allocation = event_data.get("point_allocation", {})
+            
+            # Get all relay teams for this event with results
+            teams_result = self.supabase.table("relay_teams").select("*").eq("event_id", event_id).execute()
+            if not teams_result.data:
+                return
+            
+            # Filter teams with results and sort by time (lower is better for track)
+            teams_with_results = [team for team in teams_result.data if team.get("result_value")]
+            sorted_teams = sorted(teams_with_results, key=lambda x: float(x["result_value"]))
+            
+            # Update positions and points
+            for i, team in enumerate(sorted_teams):
+                position = i + 1
+                points = 0
+                
+                if str(position) in point_allocation:
+                    points = point_allocation[str(position)]
+                elif position in point_allocation:
+                    points = point_allocation[position]
+                
+                self.supabase.table("relay_teams").update({
+                    "position": position,
+                    "points": points
+                }).eq("team_id", team["team_id"]).execute()
+                
+        except Exception as e:
+            logger.error(f"Error calculating relay positions: {e}")
+
     def get_relay_teams_by_event(self, event_id: int) -> List[Dict]:
         """Get all relay teams for a specific event"""
         try:
+            # Try the view first
             result = self.supabase.table("relay_team_results").select("*").eq("event_id", event_id).order("position", desc=False).execute()
+            if result.data:
+                return result.data
+        except:
+            pass
+        
+        # Fallback to direct table query
+        try:
+            result = self.supabase.table("relay_teams").select("*").eq("event_id", event_id).order("position", desc=False).execute()
             return result.data or []
-            
         except Exception as e:
             self._handle_database_error("get_relay_teams_by_event", e)
             return []
 
     def get_complete_house_points(self) -> List[Dict]:
         """Get complete house points including relay team points"""
-        try:
-            result = self.supabase.table("complete_house_points").select("*").execute()
-            return result.data or []
-            
-        except Exception as e:
-            self._handle_database_error("get_complete_house_points", e)
-            return []
+        return self.get_house_points()  # Use the corrected method with fallback
 
     def recalculate_all_points(self) -> bool:
         """Manually trigger recalculation of all points"""
         try:
+            # Try the SQL function first
             result = self.supabase.rpc("recalculate_all_points_correct").execute()
             if result.data:
-                logger.info("All points recalculated successfully")
+                logger.info("All points recalculated successfully using SQL function")
                 return True
-            return False
-            
         except Exception as e:
-            self._handle_database_error("recalculate_all_points", e)
-            return False
+            logger.warning(f"SQL function not available, using manual recalculation: {e}")
+        
+        

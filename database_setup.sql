@@ -1,4 +1,4 @@
--- Complete Point Allocation Fix for Live Sports Meet System
+-- Corrected Point Allocation Fix for Live Sports Meet System
 -- Execute this in your Supabase SQL Editor
 
 -- STEP 1: Backup existing data (IMPORTANT!)
@@ -99,6 +99,7 @@ SELECT
     rt.team_id,
     rt.team_name,
     rt.house,
+    rt.event_id,
     e.event_name,
     e.event_type,
     rt.result_value,
@@ -119,49 +120,43 @@ LEFT JOIN students s2 ON rt.member2_curtin_id = s2.curtin_id
 LEFT JOIN students s3 ON rt.member3_curtin_id = s3.curtin_id
 LEFT JOIN students s4 ON rt.member4_curtin_id = s4.curtin_id;
 
--- STEP 7: Update house points view to include relay team points
-CREATE OR REPLACE VIEW complete_house_points AS
+-- STEP 7: CORRECTED house points view - no double counting
+CREATE OR REPLACE VIEW corrected_house_points AS
 SELECT 
     house,
-    SUM(individual_points + relay_points) AS total_points,
-    SUM(individual_points) AS individual_points,
-    SUM(relay_points) AS relay_points
+    individual_points + relay_team_points as total_points,
+    individual_points,
+    relay_team_points
 FROM (
-    -- Individual event points
     SELECT 
-        s.house,
-        COALESCE(SUM(r.points), 0) AS individual_points,
-        0 AS relay_points
-    FROM students s
-    LEFT JOIN results r ON s.curtin_id = r.curtin_id
-    LEFT JOIN events e ON r.event_id = e.event_id
-    WHERE e.is_relay = FALSE OR e.is_relay IS NULL
-    GROUP BY s.house
-    
-    UNION ALL
-    
-    -- Individual points from relay events (for individual tracking)
-    SELECT 
-        s.house,
-        0 AS individual_points,
-        COALESCE(SUM(r.points), 0) AS relay_points
-    FROM students s
-    LEFT JOIN results r ON s.curtin_id = r.curtin_id
-    LEFT JOIN events e ON r.event_id = e.event_id
-    WHERE e.is_relay = TRUE
-    GROUP BY s.house
-    
-    UNION ALL
-    
-    -- Team relay points (when implemented)
-    SELECT 
-        rt.house,
-        0 AS individual_points,
-        COALESCE(SUM(rt.points), 0) AS relay_points
-    FROM relay_teams rt
-    GROUP BY rt.house
-) combined_points
-GROUP BY house
+        h.house,
+        COALESCE(ind.points, 0) as individual_points,
+        COALESCE(rel.points, 0) as relay_team_points
+    FROM (
+        -- Get all houses
+        SELECT DISTINCT house FROM students
+    ) h
+    LEFT JOIN (
+        -- Individual event points ONLY (exclude relay events from results table)
+        SELECT 
+            s.house,
+            SUM(r.points) as points
+        FROM students s
+        JOIN results r ON s.curtin_id = r.curtin_id
+        JOIN events e ON r.event_id = e.event_id
+        WHERE e.is_relay = FALSE  -- Only individual events
+        GROUP BY s.house
+    ) ind ON h.house = ind.house
+    LEFT JOIN (
+        -- Relay team points ONLY (from relay_teams table)
+        SELECT 
+            house,
+            SUM(points) as points
+        FROM relay_teams
+        WHERE result_value IS NOT NULL  -- Only completed relay teams
+        GROUP BY house
+    ) rel ON h.house = rel.house
+) combined
 ORDER BY total_points DESC;
 
 -- STEP 8: Create function to calculate relay team positions and points
@@ -203,7 +198,97 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- STEP 9: Verify the fix worked correctly
+-- STEP 9: Add validation function for relay team members
+CREATE OR REPLACE FUNCTION validate_relay_team_members(
+    member1_id VARCHAR,
+    member2_id VARCHAR, 
+    member3_id VARCHAR,
+    member4_id VARCHAR,
+    team_house VARCHAR
+)
+RETURNS BOOLEAN AS $$
+DECLARE
+    member_count INTEGER;
+BEGIN
+    -- Check that all members exist and belong to the same house as the team
+    SELECT COUNT(*) INTO member_count
+    FROM students 
+    WHERE curtin_id IN (member1_id, member2_id, member3_id, member4_id)
+    AND house = team_house;
+    
+    -- Should have exactly 4 members from the same house
+    RETURN member_count = 4;
+END;
+$$ LANGUAGE plpgsql;
+
+-- STEP 10: Add constraint to relay_teams table
+ALTER TABLE relay_teams 
+DROP CONSTRAINT IF EXISTS valid_relay_team_members;
+
+ALTER TABLE relay_teams 
+ADD CONSTRAINT valid_relay_team_members 
+CHECK (validate_relay_team_members(member1_curtin_id, member2_curtin_id, member3_curtin_id, member4_curtin_id, house));
+
+-- STEP 11: Create comprehensive athlete performance view
+CREATE OR REPLACE VIEW athlete_complete_performance AS
+SELECT 
+    s.curtin_id,
+    s.bib_id,
+    s.first_name,
+    s.last_name,
+    s.house,
+    s.gender,
+    
+    -- Individual event statistics
+    COALESCE(ind.total_events, 0) as individual_events,
+    COALESCE(ind.total_points, 0) as individual_points,
+    COALESCE(ind.gold_medals, 0) as individual_gold,
+    COALESCE(ind.silver_medals, 0) as individual_silver,
+    COALESCE(ind.bronze_medals, 0) as individual_bronze,
+    
+    -- Relay participation count
+    COALESCE(rel.relay_teams, 0) as relay_teams_count,
+    
+    -- Combined totals (individual points only, as relay points go to teams)
+    COALESCE(ind.total_events, 0) + COALESCE(rel.relay_teams, 0) as total_events_participation,
+    COALESCE(ind.total_points, 0) as total_individual_points,
+    
+    -- Overall ranking based on individual points
+    RANK() OVER (ORDER BY COALESCE(ind.total_points, 0) DESC, COALESCE(ind.gold_medals, 0) DESC) as overall_rank,
+    RANK() OVER (PARTITION BY s.gender ORDER BY COALESCE(ind.total_points, 0) DESC, COALESCE(ind.gold_medals, 0) DESC) as gender_rank
+    
+FROM students s
+LEFT JOIN (
+    -- Individual performance (excluding relay events)
+    SELECT 
+        s2.curtin_id,
+        COUNT(r.result_id) as total_events,
+        SUM(r.points) as total_points,
+        COUNT(CASE WHEN r.position = 1 THEN 1 END) as gold_medals,
+        COUNT(CASE WHEN r.position = 2 THEN 1 END) as silver_medals,
+        COUNT(CASE WHEN r.position = 3 THEN 1 END) as bronze_medals
+    FROM students s2
+    JOIN results r ON s2.curtin_id = r.curtin_id
+    JOIN events e ON r.event_id = e.event_id
+    WHERE e.is_relay = FALSE
+    GROUP BY s2.curtin_id
+) ind ON s.curtin_id = ind.curtin_id
+LEFT JOIN (
+    -- Relay participation count
+    SELECT curtin_id, COUNT(*) as relay_teams FROM (
+        SELECT member1_curtin_id as curtin_id FROM relay_teams
+        UNION ALL
+        SELECT member2_curtin_id FROM relay_teams  
+        UNION ALL
+        SELECT member3_curtin_id FROM relay_teams
+        UNION ALL
+        SELECT member4_curtin_id FROM relay_teams
+    ) relay_members
+    GROUP BY curtin_id
+) rel ON s.curtin_id = rel.curtin_id
+ORDER BY total_individual_points DESC NULLS LAST;
+
+-- STEP 12: Verify the fix worked correctly
 SELECT 
     e.event_name,
     e.is_relay,
@@ -216,8 +301,5 @@ LEFT JOIN results r ON e.event_id = r.event_id
 GROUP BY e.event_id, e.event_name, e.is_relay, e.point_allocation
 ORDER BY e.event_name;
 
--- STEP 10: Clean up functions (keep the calculation functions for future use)
--- DROP FUNCTION recalculate_all_points_correct(); -- Keep this for future recalculations
-
 -- Display success message
-SELECT 'Point allocation fix completed successfully! Check the verification query above to confirm.' AS status;
+SELECT 'CORRECTED point allocation fix completed successfully! Relay and individual points are now properly separated.' AS status;
