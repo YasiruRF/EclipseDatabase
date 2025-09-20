@@ -372,7 +372,7 @@ def show_top_athletes(db: DatabaseManager):
     best_athletes = db.get_best_athletes_by_gender()
     
     if best_athletes:
-        cols = st.columns(len([k for k in best_athletes.keys() if k in ['Male', 'Female']]))
+    cols = st.columns(len([k for k in best_athletes.keys() if k in ['male', 'female']]))
         col_idx = 0
         
         for gender in ['Male', 'Female']:
