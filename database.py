@@ -25,44 +25,52 @@ except ImportError:
     logger.info("python-dotenv not available, using environment variables directly")
 
 class DatabaseManager:
-    def __init__(self):
-        """Initialize Supabase client with improved error handling"""
+    def __init__(self, recalc_on_startup: bool = True):
+    
+        # Ensure the supabase client package is available
         if not SUPABASE_AVAILABLE:
             raise ImportError("Supabase client not available. Install with: pip install supabase")
-            
-        # Manual fallback - recalculate all individual events
-        try:
-            all_events = self.get_all_events()
-            events_processed = 0
-            
-            for event in all_events:
-                if not event.get('is_relay', False):  # Only individual events
-                    self._calculate_positions_and_points(event['event_id'])
-                    events_processed += 1
-                else:  # Relay events
-                    self._calculate_relay_positions_and_points(event['event_id'])
-                    events_processed += 1
-            
-            logger.info(f"Manual recalculation completed for {events_processed} events")
-            return True
-            
-        except Exception as e:
-            self._handle_database_error("recalculate_all_points_manual", e)
-            return False  # Get credentials from environment variables or Streamlit secrets
+
+        # Get credentials (uses your _get_credential method)
         url = self._get_credential("SUPABASE_URL")
         key = self._get_credential("SUPABASE_KEY")
-        
+
         if not url or not key:
+            # Fail fast — better than creating a partially-initialized object
             raise ValueError("Supabase credentials not found. Please set SUPABASE_URL and SUPABASE_KEY")
-        
-        # Create Supabase client
-        self.supabase: Client = create_client(url, key)
-        
-        # Test connection
+
+        # Create Supabase client and test connection
+        try:
+            self.supabase: Client = create_client(url, key)
+        except Exception as e:
+            logger.error(f"Failed to create Supabase client: {e}")
+            raise ConnectionError("Failed to create Supabase client") from e
+
         if not self._test_connection():
             raise ConnectionError("Failed to establish database connection")
-        
+
         logger.info("Database connection established successfully")
+
+        # Optional: attempt to recalculate points after a successful connection.
+        # We call your recalculate_all_points() method (which should handle RPC + manual fallback).
+        if recalc_on_startup:
+            try:
+                # If recalculate_all_points returns a boolean, we ignore it here;
+                # any exceptions will be handled/logged below.
+                if hasattr(self, "recalculate_all_points"):
+                    try:
+                        self.recalculate_all_points()
+                        logger.info("Recalculation attempted on startup.")
+                    except Exception as e:
+                        logger.warning(f"Recalculation on startup failed: {e}")
+                        # Use your centralized handler so the UI sees a friendly message
+                        self._handle_database_error("recalculate_on_init", e)
+                else:
+                    logger.debug("No recalculate_all_points() method found; skipping startup recalculation.")
+            except Exception as e:
+                # Defensive: log anything unexpected
+                logger.error(f"Unexpected error during startup recalc: {e}")
+                self._handle_database_error("recalculate_on_init_unexpected", e)
 
     def _get_credential(self, key: str) -> str:
         """Get credential from environment or Streamlit secrets"""
